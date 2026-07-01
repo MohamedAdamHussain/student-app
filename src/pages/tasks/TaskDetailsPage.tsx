@@ -42,8 +42,8 @@ export function TaskDetailsPage() {
   }
 
   const isFinal = task.type === 'final'
-  const days = daysUntil(task.batch?.end_date ?? task.created_at)
-  const hasSubmitted = !!task.my_submission_status
+  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
+  const hasSubmitted = !!task.mySubmissionStatus
 
   return (
     <AppShell title="تفاصيل المهمة">
@@ -82,15 +82,15 @@ export function TaskDetailsPage() {
               <Badge variant={isFinal ? 'warning' : 'info'}>
                 {isFinal ? 'Final' : 'HW'}
               </Badge>
-              {task.video_required && (
+              {task.videoRequired && (
                 <Badge variant="info">
                   <Video size={12} />
                   يحتاج فيديو
                 </Badge>
               )}
-              <Badge variant={task.is_team ? 'accent' : 'neutral'}>
+              <Badge variant={task.isTeam ? 'accent' : 'neutral'}>
                 <Users size={12} />
-                {task.is_team ? 'فِرقي' : 'فردي'}
+                {task.isTeam ? 'فِرقي' : 'فردي'}
               </Badge>
             </div>
             <Badge variant={days < 7 ? 'warning' : 'neutral'}>
@@ -116,19 +116,19 @@ export function TaskDetailsPage() {
             <div>
               <div className="text-xs text-ink-400 uppercase font-semibold mb-1.5">نوع العمل</div>
               <div className="font-bold text-lg">
-                {task.is_team ? `فِرقي (حتى ${task.max_team_size})` : 'فردي'}
+                {task.isTeam ? `فِرقي (حتى ${task.maxTeamSize})` : 'فردي'}
               </div>
               <div className="text-sm text-ink-400 mt-0.5">
-                {task.is_team ? 'يتطلب فريقاً' : 'لا يتطلب فريقاً'}
+                {task.isTeam ? 'يتطلب فريقاً' : 'لا يتطلب فريقاً'}
               </div>
             </div>
             <div>
               <div className="text-xs text-ink-400 uppercase font-semibold mb-1.5">حالتي</div>
               <div className="font-bold text-lg">
                 {hasSubmitted
-                  ? task.my_submission_status === 'accepted'
+                  ? task.mySubmissionStatus === 'accepted'
                     ? 'مقبول ✓'
-                    : task.my_submission_status === 'pending'
+                    : task.mySubmissionStatus === 'pending'
                     ? 'معلّق'
                     : 'مرفوض'
                   : 'لم أُسلّم'}
@@ -210,9 +210,9 @@ export function TaskDetailsPage() {
                 <div>
                   <div className="font-bold text-success">تم التسليم</div>
                   <div className="text-sm text-ink-600 dark:text-ink-300">
-                    {task.my_submission_status === 'pending'
+                    {task.mySubmissionStatus === 'pending'
                       ? 'بانتظار المراجعة من المسؤول'
-                      : task.my_submission_status === 'accepted'
+                      : task.mySubmissionStatus === 'accepted'
                       ? 'تم قبول تقديمك ✓'
                       : 'تم رفض التقديم - راجع ملاحظات المسؤول'}
                   </div>
@@ -242,7 +242,7 @@ export function TaskDetailsPage() {
                 { label: 'GitHub URL', required: false },
                 { label: 'Live URL (Deployment)', required: false },
                 { label: 'ملف (PDF/ZIP)', required: false },
-                { label: 'فيديو', required: task.video_required },
+                { label: 'فيديو', required: task.videoRequired },
               ].map((fmt) => (
                 <div key={fmt.label} className="flex items-center gap-3">
                   <CheckCircle2
@@ -272,12 +272,12 @@ export function TaskDetailsPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-ink-500">سلّموا</span>
-                <span className="font-bold text-success">{task.submissions_count}</span>
+                <span className="font-bold text-success">{task.submissionsCount}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-ink-500">نسبة التسليم</span>
                 <span className="font-bold">
-                  {Math.round(((task.submissions_count ?? 0) / 24) * 100)}%
+                  {Math.round(((task.submissionsCount ?? 0) / 24) * 100)}%
                 </span>
               </div>
             </div>

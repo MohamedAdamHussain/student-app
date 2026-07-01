@@ -115,8 +115,8 @@ function HackathonCard({ hackathon }: { hackathon: Hackathon }) {
             )}
             {isUpcoming && <Badge variant="info">قادم</Badge>}
             {isCompleted && <Badge variant="neutral">منتهي</Badge>}
-            <Badge variant={hackathon.is_team ? 'accent' : 'neutral'}>
-              {hackathon.is_team ? `فِرقي · حتى ${hackathon.max_team_size}` : 'فردي'}
+            <Badge variant={hackathon.isTeam ? 'accent' : 'neutral'}>
+              {hackathon.isTeam ? `فِرقي · حتى ${hackathon.maxTeamSize}` : 'فردي'}
             </Badge>
           </div>
         </div>
@@ -154,18 +154,18 @@ function HackathonCard({ hackathon }: { hackathon: Hackathon }) {
         <div className="border-t border-ink-100 dark:border-ink-800 pt-3 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-ink-400">
             <Users size={14} />
-            <span>{hackathon.submissions_count ?? 0} {hackathon.is_team ? 'فرق' : 'مشترك'}</span>
+            <span>{hackathon.submissionsCount ?? 0} {hackathon.isTeam ? 'فرق' : 'مشترك'}</span>
           </div>
-          {hackathon.my_rank && (
+          {hackathon.myRank && (
             <Badge variant="success">
               <Medal size={12} />
-              المركز #{hackathon.my_rank} · {hackathon.my_score}/100
+              المركز #{hackathon.myRank} · {hackathon.myScore}/100
             </Badge>
           )}
-          {!isCompleted && !hackathon.my_team && (
+          {!isCompleted && !hackathon.myTeam && (
             <Badge variant="accent">سجّل الآن</Badge>
           )}
-          {!isCompleted && hackathon.my_team && (
+          {!isCompleted && hackathon.myTeam && (
             <Badge variant="success">مسجّل</Badge>
           )}
         </div>

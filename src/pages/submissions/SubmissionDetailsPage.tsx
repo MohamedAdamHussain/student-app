@@ -38,7 +38,7 @@ export function SubmissionDetailsPage() {
   const isAccepted = submission.status === 'accepted'
   const title = submission.task?.title ?? submission.hackathon?.title ?? 'تقديم'
   const statusBadge = {
-    accepted: <Badge variant="success"><CheckCircle2 size={12} /> مقبول{submission.is_featured && ' · مميّز ⭐'}</Badge>,
+    accepted: <Badge variant="success"><CheckCircle2 size={12} /> مقبول{submission.isFeatured && ' · مميّز ⭐'}</Badge>,
     pending: <Badge variant="warning"><Clock size={12} /> معلّق</Badge>,
     rejected: <Badge variant="danger">مرفوض</Badge>,
   }[submission.status]
@@ -88,7 +88,7 @@ export function SubmissionDetailsPage() {
                   {statusBadge}
                 </div>
                 <div className="text-sm text-ink-500">
-                  قُدِّم {formatRelative(submission.created_at)} · {submission.team_id ? 'فِرقي' : 'فردي'}
+                  قُدِّم {formatRelative(submission.createdAt)} · {submission.teamId ? 'فِرقي' : 'فردي'}
                 </div>
               </div>
             </div>
@@ -127,8 +127,8 @@ export function SubmissionDetailsPage() {
             <div>
               <div className="text-xs text-ink-400 mb-1 uppercase">تاريخ المراجعة</div>
               <div className="font-semibold">
-                {submission.auditLogs?.[0]?.created_at
-                  ? formatRelative(submission.auditLogs[0].created_at)
+                {submission.auditLogs?.[0]?.createdAt
+                  ? formatRelative(submission.auditLogs[0].createdAt)
                   : '—'}
               </div>
             </div>
@@ -147,34 +147,34 @@ export function SubmissionDetailsPage() {
           <Card>
             <CardTitle className="mb-4">محتوى التقديم</CardTitle>
             <div className="flex flex-col gap-3">
-              {submission.github_url && (
+              {submission.githubUrl && (
                 <SubmissionLink
                   icon={<Code size={18} />}
                   label="GitHub Repository"
-                  url={submission.github_url}
+                  url={submission.githubUrl}
                   color="bg-brand-50 dark:bg-brand-900/20 text-brand-500"
                   actionLabel="فتح"
                 />
               )}
-              {submission.live_url && (
+              {submission.liveUrl && (
                 <SubmissionLink
                   icon={<Globe size={18} />}
                   label="Live Deployment"
-                  url={submission.live_url}
+                  url={submission.liveUrl}
                   color="bg-info-soft text-info"
                   actionLabel="فتح"
                 />
               )}
-              {submission.video_url && (
+              {submission.videoUrl && (
                 <SubmissionLink
                   icon={<Video size={18} />}
                   label="Demo Video"
-                  url={submission.video_url}
+                  url={submission.videoUrl}
                   color="bg-warning-soft text-warning"
                   actionLabel="تشغيل"
                 />
               )}
-              {submission.file_path && (
+              {submission.filePath && (
                 <SubmissionLink
                   icon={<FileText size={18} />}
                   label="API Documentation (PDF)"
@@ -235,7 +235,7 @@ export function SubmissionDetailsPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="font-semibold text-sm">90Soft Admin</span>
                     <span className="text-xs text-ink-400">
-                      · راجع {submission.auditLogs[0].created_at && formatRelative(submission.auditLogs[0].created_at)}
+                      · راجع {submission.auditLogs[0].createdAt && formatRelative(submission.auditLogs[0].createdAt)}
                     </span>
                   </div>
                   <div className="p-3 bg-ink-50 dark:bg-ink-800/50 rounded-md text-sm leading-relaxed whitespace-pre-line">
@@ -261,7 +261,7 @@ export function SubmissionDetailsPage() {
                     <div key={log.id} className="flex gap-3">
                       <div className={cn(
                         'w-7 h-7 rounded-full grid place-items-center flex-shrink-0 text-xs',
-                        log.action === 'reviewed' && log.new_status === 'accepted'
+                        log.action === 'reviewed' && log.newStatus === 'accepted'
                           ? 'bg-success text-white'
                           : log.action === 'submitted'
                           ? 'bg-info text-white'
@@ -272,19 +272,19 @@ export function SubmissionDetailsPage() {
                       <div className={cn(!isLast && 'pb-3')}>
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-semibold text-sm">
-                            {log.action === 'reviewed' && log.new_status === 'accepted' && 'تمت المراجعة وقُبل التقديم'}
-                            {log.action === 'reviewed' && log.new_status === 'rejected' && 'تمت المراجعة ورُفض التقديم'}
+                            {log.action === 'reviewed' && log.newStatus === 'accepted' && 'تمت المراجعة وقُبل التقديم'}
+                            {log.action === 'reviewed' && log.newStatus === 'rejected' && 'تمت المراجعة ورُفض التقديم'}
                             {log.action === 'submitted' && 'تم تسليم المشروع'}
                           </span>
-                          {log.new_score && (
-                            <Badge variant="success">الدرجة: {(log.new_score / 10).toFixed(1)}/10</Badge>
+                          {log.newScore && (
+                            <Badge variant="success">الدرجة: {(log.newScore / 10).toFixed(1)}/10</Badge>
                           )}
-                          {log.action === 'reviewed' && submission.is_featured && isFirst && (
+                          {log.action === 'reviewed' && submission.isFeatured && isFirst && (
                             <Badge variant="accent">مميّز ⭐</Badge>
                           )}
                         </div>
                         <div className="text-xs text-ink-400">
-                          بواسطة {log.changedBy.name} · {formatRelative(log.created_at)}
+                          بواسطة {log.changedByUser.name} · {formatRelative(log.createdAt)}
                         </div>
                       </div>
                     </div>
@@ -316,7 +316,7 @@ export function SubmissionDetailsPage() {
                 'font-bold mb-1',
                 isAccepted ? 'text-success' : submission.status === 'pending' ? 'text-warning' : 'text-danger',
               )}>
-                {isAccepted ? `مقبول${submission.is_featured ? ' · مميّز ⭐' : ''}` : submission.status === 'pending' ? 'معلّق' : 'مرفوض'}
+                {isAccepted ? `مقبول${submission.isFeatured ? ' · مميّز ⭐' : ''}` : submission.status === 'pending' ? 'معلّق' : 'مرفوض'}
               </div>
               <div className="text-sm text-ink-600 dark:text-ink-300">
                 {isAccepted ? 'تم قبول تقديمك وإضافته لـ Showcase' : submission.status === 'pending' ? 'بانتظار المراجعة' : 'راجع ملاحظات المسؤول'}
@@ -328,10 +328,22 @@ export function SubmissionDetailsPage() {
           <Card>
             <CardTitle className="mb-4">إجراءات</CardTitle>
             <div className="flex flex-col gap-2">
-              <Button variant="secondary" block>
-                <Pencil size={14} />
-                تعديل (يتطلب إعادة فتح)
-              </Button>
+              {/* ✨ P0-2: تعديل التقديم المباشر لو pending */}
+              {submission.status === 'pending' && (
+                <Link to={`/submissions/${submission.id}/edit`}>
+                  <Button variant="secondary" block>
+                    <Pencil size={14} />
+                    تعديل التقديم
+                  </Button>
+                </Link>
+              )}
+              {/* لو تمت المراجعة، التعديل يتطلب إعادة فتح */}
+              {submission.status !== 'pending' && (
+                <Button variant="secondary" block disabled>
+                  <Pencil size={14} />
+                  التعديل متاح فقط قبل المراجعة
+                </Button>
+              )}
               {isAccepted && (
                 <Link to="/profile">
                   <Button block>
@@ -366,7 +378,7 @@ export function SubmissionDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-500">نوع العمل</span>
-                  <span className="font-semibold">{submission.task.is_team ? 'فِرقي' : 'فردي'}</span>
+                  <span className="font-semibold">{submission.task.isTeam ? 'فِرقي' : 'فردي'}</span>
                 </div>
               </div>
             </Card>

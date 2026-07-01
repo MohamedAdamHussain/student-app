@@ -42,7 +42,7 @@ export function HackathonDetailsPage() {
   const days = daysUntil(hackathon.deadline)
   const hours = Math.max(0, days * 24)
   const registeredTeams = (teams ?? []).filter(
-    (t) => t.teamable_id === hackathon.id && t.teamable_type === 'Hackathon',
+    (t) => t.teamableId === hackathon.id && t.teamableType === 'Hackathon',
   )
 
   return (
@@ -83,7 +83,7 @@ export function HackathonDetailsPage() {
               </span>
             )}
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/15 backdrop-blur-sm">
-              {hackathon.is_team ? `فِرقي · حتى ${hackathon.max_team_size} أعضاء` : 'فردي'}
+              {hackathon.isTeam ? `فِرقي · حتى ${hackathon.maxTeamSize} أعضاء` : 'فردي'}
             </span>
           </div>
 
@@ -171,7 +171,7 @@ export function HackathonDetailsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold">{team.name}</div>
                     <div className="text-xs text-ink-400">
-                      {team.teamMembers.length} أعضاء · أُنشئ قبل {daysUntil(team.created_at)} يوم
+                      {team.teamMembers.length} أعضاء · أُنشئ قبل {daysUntil(team.createdAt)} يوم
                     </div>
                   </div>
                   <div className="flex items-center -space-x-2 space-x-reverse">

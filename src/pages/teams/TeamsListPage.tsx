@@ -37,23 +37,23 @@ export function TeamsListPage() {
   })
 
   const myTeams = (teams ?? []).filter((t) =>
-    t.teamMembers.some((m) => m.user_id === user?.id),
+    t.teamMembers.some((m) => m.userId === user?.id),
   )
   const otherTeams = (teams ?? []).filter((t) =>
-    !t.teamMembers.some((m) => m.user_id === user?.id),
+    !t.teamMembers.some((m) => m.userId === user?.id),
   )
 
   const filtered = myTeams.filter((t) => {
-    const membership = t.teamMembers.find((m) => m.user_id === user?.id)
-    if (tab === 'leader') return membership?.is_leader
-    if (tab === 'member') return !membership?.is_leader
+    const membership = t.teamMembers.find((m) => m.userId === user?.id)
+    if (tab === 'leader') return membership?.isLeader
+    if (tab === 'member') return !membership?.isLeader
     return true
   })
 
   const counts = {
     all: myTeams.length,
-    leader: myTeams.filter((t) => t.teamMembers.find((m) => m.user_id === user?.id)?.is_leader).length,
-    member: myTeams.filter((t) => !t.teamMembers.find((m) => m.user_id === user?.id)?.is_leader).length,
+    leader: myTeams.filter((t) => t.teamMembers.find((m) => m.userId === user?.id)?.isLeader).length,
+    member: myTeams.filter((t) => !t.teamMembers.find((m) => m.userId === user?.id)?.isLeader).length,
   }
 
   return (
@@ -131,12 +131,12 @@ export function TeamsListPage() {
                     <div className="flex items-center justify-between mb-3">
                       <Badge variant="warning">هاكاثون</Badge>
                       <span className="text-xs text-ink-400">
-                        {team.teamMembers.length}/{team.teamable?.max_team_size ?? 4} أعضاء
+                        {team.teamMembers.length}/{team.teamable?.maxTeamSize ?? 4} أعضاء
                       </span>
                     </div>
                     <h3 className="font-bold mb-2">{team.name}</h3>
                     <p className="text-sm text-ink-500 mb-4 line-clamp-2">
-                      فريق يبحث عن عضو إضافي. القائد: {team.teamMembers.find((m) => m.is_leader)?.user.name}
+                      فريق يبحث عن عضو إضافي. القائد: {team.teamMembers.find((m) => m.isLeader)?.user.name}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center -space-x-2 space-x-reverse">
@@ -163,9 +163,9 @@ export function TeamsListPage() {
 }
 
 function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }) {
-  const myMembership = team.teamMembers.find((m) => m.user_id === currentUserId)
-  const isLeader = myMembership?.is_leader
-  const maxSize = team.teamable?.max_team_size ?? 4
+  const myMembership = team.teamMembers.find((m) => m.userId === currentUserId)
+  const isLeader = myMembership?.isLeader
+  const maxSize = team.teamable?.maxTeamSize ?? 4
   const isFull = team.teamMembers.length >= maxSize
   const isCompleted = team.teamable && 'deadline' in team.teamable && new Date(team.teamable.deadline).getTime() < Date.now()
 
@@ -255,7 +255,7 @@ function CreateTeamModal({
       toast.error('املأ جميع الحقول')
       return
     }
-    mutation.mutate({ name, teamable_id: Number(hackathonId), teamable_type: 'Hackathon' })
+    mutation.mutate({ name, teamableId: Number(hackathonId), teamableType: 'Hackathon' })
   }
 
   return (

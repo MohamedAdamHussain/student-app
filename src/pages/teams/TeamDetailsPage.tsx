@@ -36,8 +36,8 @@ export function TeamDetailsPage() {
     )
   }
 
-  const myMembership = team.teamMembers.find((m) => m.user_id === user?.id)
-  const isLeader = myMembership?.is_leader
+  const myMembership = team.teamMembers.find((m) => m.userId === user?.id)
+  const isLeader = myMembership?.isLeader
   const maxSize = (team.teamable as any)?.max_team_size ?? 4
   const isFull = team.teamMembers.length >= maxSize
   const hasEmptySlot = !isFull
@@ -98,12 +98,12 @@ export function TeamDetailsPage() {
             </div>
             <div>
               <div className="text-[11px] opacity-75 mb-1 uppercase">أنشأ في</div>
-              <div className="text-lg font-bold">{formatRelative(team.created_at)}</div>
+              <div className="text-lg font-bold">{formatRelative(team.createdAt)}</div>
             </div>
             <div>
               <div className="text-[11px] opacity-75 mb-1 uppercase">القائد</div>
               <div className="text-lg font-bold">
-                {team.teamMembers.find((m) => m.is_leader)?.user.name}
+                {team.teamMembers.find((m) => m.isLeader)?.user.name}
               </div>
             </div>
             <div>
@@ -137,7 +137,7 @@ export function TeamDetailsPage() {
                   key={member.id}
                   className={cn(
                     'flex items-center gap-4 p-4 border rounded-md',
-                    member.is_leader
+                    member.isLeader
                       ? 'bg-brand-50/50 dark:bg-brand-900/10 border-brand-200 dark:border-brand-800'
                       : 'border-ink-200 dark:border-ink-800',
                   )}
@@ -147,9 +147,9 @@ export function TeamDetailsPage() {
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="font-semibold">
                         {member.user.name}
-                        {member.user_id === user?.id && ' (أنت)'}
+                        {member.userId === user?.id && ' (أنت)'}
                       </span>
-                      {member.is_leader && (
+                      {member.isLeader && (
                         <Badge variant="accent">
                           <Crown size={12} />
                           القائد
@@ -159,9 +159,9 @@ export function TeamDetailsPage() {
                     <div className="text-xs text-ink-400">{member.user.email}</div>
                   </div>
                   <div className="text-xs text-ink-400">
-                    انضم {formatRelative(team.created_at)}
+                    انضم {formatRelative(team.createdAt)}
                   </div>
-                  {isLeader && !member.is_leader && (
+                  {isLeader && !member.isLeader && (
                     <Button
                       variant="ghost"
                       size="sm"

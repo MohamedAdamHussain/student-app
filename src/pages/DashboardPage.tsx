@@ -41,7 +41,7 @@ export function DashboardPage() {
   })
 
   const upcomingTasks = (tasks ?? [])
-    .filter((t) => t.my_submission_status === null || t.my_submission_status === 'pending')
+    .filter((t) => t.mySubmissionStatus === null || t.mySubmissionStatus === 'pending')
     .slice(0, 3)
 
   const recentSubmissions = (submissions ?? []).slice(0, 4)
@@ -190,7 +190,7 @@ export function DashboardPage() {
 }
 
 function TaskRow({ task }: { task: Task }) {
-  const days = daysUntil(task.batch?.end_date ?? task.created_at)
+  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
   const iconBg =
     task.type === 'final'
       ? 'bg-warning-soft text-warning'
@@ -241,7 +241,7 @@ function SubmissionRow({ submission }: { submission: Submission }) {
     >
       <div className="min-w-0">
         <div className="font-semibold text-sm truncate">{title}</div>
-        <div className="text-xs text-ink-400">{formatRelative(submission.created_at)}</div>
+        <div className="text-xs text-ink-400">{formatRelative(submission.createdAt)}</div>
       </div>
       <Badge variant={status.variant}>
         {status.icon}

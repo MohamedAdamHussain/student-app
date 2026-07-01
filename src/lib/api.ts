@@ -28,13 +28,46 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<{ message?: string; errors?: Record<string, string[]> }>) => {
-    // 401 → logout & redirect
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+
+    // ✨ 401 Unauthorized → logout & redirect to login
+    if (status === 401) {
       localStorage.removeItem('gradshow_token')
       localStorage.removeItem('gradshow_user')
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login'
       }
+    }
+
+    // ✨ 403 Forbidden → redirect to unauthorized page
+    // (لو الطالب حاول يفتح endpoint خاص بالأدمن أو العكس)
+    if (status === 403) {
+      const currentPath = window.location.pathname
+      // لا نُعيد التوجيه لو كنا بالفعل في صفحة unauthorized
+      if (!currentPath.startsWith('/unauthorized')) {
+        // نُمرر رسالة الخطأ للمستخدم قبل التوجيه
+        const msg = error.response?.data?.message ?? 'غير مصرح'
+        console.warn('🔒 403 Forbidden:', msg)
+
+        // ✨ معالجة ذكية: لو طالب حاول يفتح admin endpoint
+        // نوجهه لصفحة unauthorized بدلاً من تركه في صفحة فارغة
+        if (currentPath.startsWith('/admin')) {
+          window.location.href = '/unauthorized'
+        }
+        // لو في صفحة student و حصل 403 (مثلاً يفتح submission لطالب آخر)
+        // نعرض toast فقط (الصفحة نفسها يجب أن تعالج الخطأ)
+      }
+    }
+
+    // ✨ 419 CSRF → رسالة واضحة
+    if (status === 419) {
+      error.message = 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى'
+    }
+
+    // ✨ 500+ Server Error → رسالة واضحة
+    if (status && status >= 500) {
+      console.error('🚨 Server Error:', status, error.response?.data)
+      error.message = 'خطأ في الخادم. يرجى المحاولة لاحقاً'
     }
 
     // Enhance error with Laravel message if available
@@ -53,6 +86,11 @@ api.interceptors.response.use(
       if (firstError) {
         error.message = firstError
       }
+    }
+
+    // ✨ Network Error (no response — CORS or server down)
+    if (!error.response && error.request) {
+      error.message = 'تعذّر الاتصال بالخادم. تحقق من اتصالك بالإنترنت'
     }
 
     return Promise.reject(error)

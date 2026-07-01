@@ -35,7 +35,7 @@ export function SubmissionNewPage() {
   const [notes, setNotes] = useState('')
 
   const selectedTask = tasks?.find((t) => t.id === Number(taskId))
-  const videoRequired = type === 'task' && selectedTask?.video_required
+  const videoRequired = type === 'task' && selectedTask?.videoRequired
 
   const createMutation = useMutation({
     mutationFn: mockCreateSubmission,
@@ -44,11 +44,32 @@ export function SubmissionNewPage() {
       toast.success('تم إنشاء التقديم بنجاح ✓')
       navigate(`/submissions/${data.id}`)
     },
-    onError: () => toast.error('حدث خطأ أثناء الإنشاء'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'حدث خطأ أثناء الإنشاء'
+      toast.error(msg)
+    },
   })
+
+  // ✨ P0-1: فحص deadline قبل التقديم
+  const isDeadlinePassed = () => {
+    if (type === 'task' && selectedTask?.batch?.end_date) {
+      return new Date(selectedTask.batch.end_date) < new Date()
+    }
+    if (type === 'hackathon' && hackathonId) {
+      const h = hackathons?.find((h: any) => h.id === Number(hackathonId))
+      return h && new Date(h.deadline) < new Date()
+    }
+    return false
+  }
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
+
+    // ✨ P0-1: منع التقديم بعد deadline
+    if (isDeadlinePassed()) {
+      toast.error('انتهى موعد التقديم على هذه المهمة. لا يمكن التقديم بعد انتهاء الدفعة.')
+      return
+    }
 
     // Validation
     if (type === 'task' && !taskId) {
@@ -69,12 +90,12 @@ export function SubmissionNewPage() {
     }
 
     createMutation.mutate({
-      task_id: type === 'task' ? Number(taskId) : null,
-      hackathon_id: type === 'hackathon' ? Number(hackathonId) : null,
-      team_id: teamId ? Number(teamId) : null,
-      github_url: githubUrl || null,
-      live_url: liveUrl || null,
-      video_url: videoUrl || null,
+      taskId: type === 'task' ? Number(taskId) : null,
+      hackathonId: type === 'hackathon' ? Number(hackathonId) : null,
+      teamId: teamId ? Number(teamId) : null,
+      githubUrl: githubUrl || null,
+      liveUrl: liveUrl || null,
+      videoUrl: videoUrl || null,
       notes: notes || null,
     })
   }
@@ -201,7 +222,7 @@ export function SubmissionNewPage() {
               }
             >
               <option value="">تسليم فردي (بدون فريق)</option>
-              {teams?.filter((t) => t.teamable_id === (Number(taskId) || Number(hackathonId))).map((t) => (
+              {teams?.filter((t) => t.teamableId === (Number(taskId) || Number(hackathonId))).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} ({t.teamMembers.length} أعضاء)
                 </option>
@@ -295,7 +316,7 @@ export function SubmissionNewPage() {
                   <Badge variant={selectedTask.type === 'final' ? 'warning' : 'info'}>
                     {selectedTask.type === 'final' ? 'Final' : 'HW'}
                   </Badge>
-                  {selectedTask.video_required && (
+                  {selectedTask.videoRequired && (
                     <Badge variant="info">فيديو إلزامي</Badge>
                   )}
                 </div>

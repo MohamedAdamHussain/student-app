@@ -30,11 +30,11 @@ export function ProfileEditPage() {
   const [form, setForm] = useState({
     bio: profile?.bio ?? '',
     tagline: profile?.tagline ?? '',
-    github_url: profile?.github_url ?? '',
-    linkedin_url: profile?.linkedin_url ?? '',
-    portfolio_url: profile?.portfolio_url ?? '',
-    featured_project_id: profile?.featured_project_id ?? '',
-    tracks: profile?.tracks.map((t) => t.id) ?? [],
+    githubUrl: profile?.githubUrl ?? '',
+    linkedinUrl: profile?.linkedinUrl ?? '',
+    portfolioUrl: profile?.portfolioUrl ?? '',
+    featuredProjectId: profile?.featuredProjectId ?? '',
+    tracks: profile?.tracks?.map((t) => t.id) ?? [],
   })
 
   const updateMutation = useMutation({
@@ -63,14 +63,14 @@ export function ProfileEditPage() {
     e.preventDefault()
     updateMutation.mutate({
       ...form,
-      featured_project_id: form.featured_project_id ? Number(form.featured_project_id) : null,
+      featuredProjectId: form.featuredProjectId ? Number(form.featuredProjectId) : null,
     } as any)
   }
 
   // Profile completion calculation
   const fields = [
-    form.tagline, form.bio, form.github_url, form.linkedin_url,
-    form.featured_project_id, form.tracks.length > 0,
+    form.tagline, form.bio, form.githubUrl, form.linkedinUrl,
+    form.featuredProjectId, form.tracks.length > 0,
   ]
   const filled = fields.filter(Boolean).length
   const completion = Math.round((filled / fields.length) * 100)
@@ -172,22 +172,22 @@ export function ProfileEditPage() {
           <div className="grid md:grid-cols-2 gap-4">
             <Input
               label="GitHub URL"
-              value={form.github_url}
-              onChange={(e) => set('github_url', e.target.value)}
+              value={form.githubUrl}
+              onChange={(e) => set('githubUrl', e.target.value)}
               placeholder="https://github.com/username"
             />
             <Input
               label="LinkedIn URL"
-              value={form.linkedin_url}
-              onChange={(e) => set('linkedin_url', e.target.value)}
+              value={form.linkedinUrl}
+              onChange={(e) => set('linkedinUrl', e.target.value)}
               placeholder="https://linkedin.com/in/username"
             />
           </div>
 
           <Input
             label="Portfolio URL (اختياري)"
-            value={form.portfolio_url}
-            onChange={(e) => set('portfolio_url', e.target.value)}
+            value={form.portfolioUrl}
+            onChange={(e) => set('portfolioUrl', e.target.value)}
             placeholder="https://myportfolio.com"
           />
         </Card>
@@ -260,8 +260,8 @@ export function ProfileEditPage() {
           </p>
 
           <Select
-            value={form.featured_project_id}
-            onChange={(e) => set('featured_project_id', e.target.value)}
+            value={form.featuredProjectId}
+            onChange={(e) => set('featuredProjectId', e.target.value)}
             hint="يمكنك اختيار تقديم مقبول فقط"
           >
             <option value="">— اختر مشروعاً مميزاً —</option>

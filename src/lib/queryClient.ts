@@ -27,3 +27,11 @@ export const queryKeys = {
   tracks: ['tracks'] as const,
   batches: ['batches'] as const,
 }
+
+// ✨ Feature Proposals
+export const proposalKeys = {
+  all: ['proposals'] as const,
+  mine: ['proposals', 'mine'] as const,
+  hackathon: (hackathonId: number) => ['proposals', 'hackathon', hackathonId] as const,
+  detail: (id: number) => ['proposals', id] as const,
+}

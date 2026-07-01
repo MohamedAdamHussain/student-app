@@ -26,9 +26,9 @@ export function TasksListPage() {
 
   const filtered = (tasks ?? []).filter((t) => {
     if (filter !== 'all' && t.type !== filter) return false
-    if (statusFilter === 'not_submitted' && t.my_submission_status) return false
-    if (statusFilter === 'pending' && t.my_submission_status !== 'pending') return false
-    if (statusFilter === 'accepted' && t.my_submission_status !== 'accepted') return false
+    if (statusFilter === 'not_submitted' && t.mySubmissionStatus) return false
+    if (statusFilter === 'pending' && t.mySubmissionStatus !== 'pending') return false
+    if (statusFilter === 'accepted' && t.mySubmissionStatus !== 'accepted') return false
     return true
   })
 
@@ -112,7 +112,7 @@ export function TasksListPage() {
 }
 
 function TaskCard({ task }: { task: Task }) {
-  const days = daysUntil(task.batch?.end_date ?? task.created_at)
+  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
   const isFinal = task.type === 'final'
   const statusMap: Record<SubmissionStatus | 'none', { variant: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
     none: { variant: 'neutral', label: 'لم تسلّم' },
@@ -120,7 +120,7 @@ function TaskCard({ task }: { task: Task }) {
     accepted: { variant: 'success', label: 'مقبول' },
     rejected: { variant: 'danger', label: 'مرفوض' },
   }
-  const status = statusMap[task.my_submission_status ?? 'none']
+  const status = statusMap[task.mySubmissionStatus ?? 'none']
 
   return (
     <Link
@@ -145,7 +145,7 @@ function TaskCard({ task }: { task: Task }) {
             <Badge variant={isFinal ? 'warning' : 'info'}>
               {isFinal ? 'Final' : 'HW'}
             </Badge>
-            {task.video_required && (
+            {task.videoRequired && (
               <Badge variant="info">يحتاج فيديو</Badge>
             )}
           </div>

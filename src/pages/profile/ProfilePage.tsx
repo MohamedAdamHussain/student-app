@@ -22,12 +22,17 @@ import { Button } from '@/components/ui/Button'
 import { Progress } from '@/components/ui/Progress'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/context/AuthContext'
-import { mockGetSubmissions, mockGetDashboardStats } from '@/lib/mockData'
+import { mockGetSubmissions, mockGetDashboardStats, mockGetProfile } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 
 export function ProfilePage() {
   const { user } = useAuth()
-  const profile = user?.studentProfile
+
+  // ✨ جلب الـ profile من API مباشرة (لا نعتمد على user object المُخزّن)
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: queryKeys.profile,
+    queryFn: mockGetProfile,
+  })
 
   const { data: submissions } = useQuery({
     queryKey: queryKeys.submissions,
@@ -41,10 +46,18 @@ export function ProfilePage() {
   const acceptedSubmissions = (submissions ?? []).filter((s) => s.status === 'accepted')
   const featuredProject = profile?.featuredProject
 
-  if (!profile) {
+  if (!profile || profileLoading) {
     return (
       <AppShell title="ملفي الشخصي">
-        <Skeleton className="h-96" />
+        <div className="space-y-4">
+          <Skeleton className="h-48" />
+          <div className="grid md:grid-cols-3 gap-4">
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </div>
+          <Skeleton className="h-64" />
+        </div>
       </AppShell>
     )
   }
@@ -105,31 +118,31 @@ export function ProfilePage() {
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {profile.github_url && (
-                <a href={profile.github_url} target="_blank" rel="noreferrer">
+              {profile.githubUrl && (
+                <a href={profile.githubUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <Code size={14} />
                     GitHub
                   </Button>
                 </a>
               )}
-              {profile.linkedin_url && (
-                <a href={profile.linkedin_url} target="_blank" rel="noreferrer">
+              {profile.linkedinUrl && (
+                <a href={profile.linkedinUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <Briefcase size={14} />
                     LinkedIn
                   </Button>
                 </a>
               )}
-              {profile.portfolio_url && (
-                <a href={profile.portfolio_url} target="_blank" rel="noreferrer">
+              {profile.portfolioUrl && (
+                <a href={profile.portfolioUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <Globe size={14} />
                     Portfolio
                   </Button>
                 </a>
               )}
-              {profile.cv_path && (
+              {profile.cvPath && (
                 <a href="#">
                   <Button variant="secondary" size="sm">
                     <Download size={14} />
@@ -220,24 +233,24 @@ export function ProfilePage() {
             </p>
 
             <div className="flex gap-3 mb-4 flex-wrap">
-              {featuredProject.github_url && (
-                <a href={featuredProject.github_url} target="_blank" rel="noreferrer">
+              {featuredProject?.githubUrl && (
+                <a href={featuredProject?.githubUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <Code size={14} />
                     GitHub
                   </Button>
                 </a>
               )}
-              {featuredProject.live_url && (
-                <a href={featuredProject.live_url} target="_blank" rel="noreferrer">
+              {featuredProject?.liveUrl && (
+                <a href={featuredProject?.liveUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <Globe size={14} />
                     Live Demo
                   </Button>
                 </a>
               )}
-              {featuredProject.video_url && (
-                <a href={featuredProject.video_url} target="_blank" rel="noreferrer">
+              {featuredProject?.videoUrl && (
+                <a href={featuredProject?.videoUrl} target="_blank" rel="noreferrer">
                   <Button variant="secondary" size="sm">
                     <FileText size={14} />
                     عرض الفيديو

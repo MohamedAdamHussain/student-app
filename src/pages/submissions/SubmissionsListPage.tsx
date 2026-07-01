@@ -38,7 +38,7 @@ export function SubmissionsListPage() {
     if (statusFilter && s.status !== statusFilter) return false
     if (typeFilter === 'hw' && !(s.task && s.task.type === 'hw')) return false
     if (typeFilter === 'final' && !(s.task && s.task.type === 'final')) return false
-    if (typeFilter === 'hackathon' && !s.hackathon_id) return false
+    if (typeFilter === 'hackathon' && !s.hackathonId) return false
     return true
   })
 
@@ -150,7 +150,7 @@ function SubmissionRow({ submission, delay }: { submission: Submission; delay: n
   const status = statusConfig[submission.status]
   const StatusIcon = status.icon
 
-  const isHackathon = !!submission.hackathon_id
+  const isHackathon = !!submission.hackathonId
   const isFinal = submission.task?.type === 'final'
   const title = submission.task?.title ?? submission.hackathon?.title ?? 'تقديم'
   const Icon = isHackathon ? Trophy : isFinal ? Trophy : CheckSquare
@@ -175,7 +175,7 @@ function SubmissionRow({ submission, delay }: { submission: Submission; delay: n
             <div className="font-semibold truncate">{title}</div>
             <div className="text-xs text-ink-400">
               {isHackathon ? 'هاكاثون' : submission.task ? `HW #${submission.task.id}` : ''}
-              {submission.team_id ? ' · فِرقي' : ' · فردي'}
+              {submission.teamId ? ' · فِرقي' : ' · فردي'}
             </div>
           </div>
         </div>
@@ -185,12 +185,12 @@ function SubmissionRow({ submission, delay }: { submission: Submission; delay: n
           {isHackathon ? 'Hackathon' : isFinal ? 'Final' : 'HW'}
         </Badge>
       </td>
-      <td className="p-3 text-sm text-ink-400">{formatRelative(submission.created_at)}</td>
+      <td className="p-3 text-sm text-ink-400">{formatRelative(submission.createdAt)}</td>
       <td className="p-3">
         <Badge variant={status.variant}>
           <StatusIcon size={12} />
           {status.label}
-          {submission.is_featured && ' · مميّز ⭐'}
+          {submission.isFeatured && ' · مميّز ⭐'}
         </Badge>
       </td>
       <td className="p-3">
