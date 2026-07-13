@@ -26,6 +26,7 @@ import { mockGetSubmissions, mockGetDashboardStats, mockGetProfile } from '@/lib
 import { queryKeys } from '@/lib/queryClient'
 import { formatDate } from '@/lib/utils'
 import { assetUrl } from '@/lib/api'
+import { ContributionSummary } from './ContributionComponents'
 import type { Batch } from '@/types'
 
 /**
@@ -126,10 +127,16 @@ export function ProfilePage() {
             <div className="flex-1 min-w-[240px]">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <h1 className="text-3xl font-extrabold">{user?.name}</h1>
-                <Badge variant="success">
-                  <Star size={12} />
-                  مُتحقق
-                </Badge>
+                {/* ✨ P1 PATCH: اعرض badge "مُتحقق" فقط لو البريد مُؤكَّد فعلاً */}
+                {user?.emailVerifiedAt && (
+                  <Badge variant="success">
+                    <Star size={12} />
+                    مُتحقق
+                  </Badge>
+                )}
+                {!user?.emailVerifiedAt && (
+                  <Badge variant="warning">بريد غير مُؤكَّد</Badge>
+                )}
               </div>
               <div className="text-ink-500 mb-4">
                 {profile.tagline}
@@ -194,6 +201,9 @@ export function ProfilePage() {
           </div>
         </Card>
       </motion.div>
+
+      {/* ✨ TEAM EVALUATION: ملخص مساهمات الطالب في الفرق */}
+      <ContributionSummary submissions={acceptedSubmissions} />
 
       {/* Three-column summary */}
       <div className="grid md:grid-cols-3 gap-5 mb-6">
@@ -395,6 +405,7 @@ export function ProfilePage() {
               <tr className="bg-ink-50 dark:bg-ink-800/50 text-xs uppercase text-ink-500">
                 <th className="text-right p-3 font-semibold">المشروع</th>
                 <th className="text-right p-3 font-semibold">النوع</th>
+                <th className="text-right p-3 font-semibold">المساهمة</th>
                 <th className="text-right p-3 font-semibold">الدرجة</th>
                 <th className="text-right p-3 font-semibold"></th>
               </tr>
@@ -409,9 +420,27 @@ export function ProfilePage() {
                     </div>
                   </td>
                   <td className="p-3">
-                    <Badge variant={s.task?.type === 'final' || s.hackathon ? 'warning' : 'info'}>
-                      {s.task?.type === 'final' ? 'Final' : s.hackathon ? 'Hackathon' : 'HW'}
+                    {/* ✨ P1-A: حذف 'final' — Hackathon أو HW فقط */}
+                    <Badge variant={s.hackathon ? 'warning' : 'info'}>
+                      {s.hackathon ? 'Hackathon' : 'HW'}
                     </Badge>
+                  </td>
+                  {/* ✨ TEAM EVALUATION: عمود المساهمة */}
+                  <td className="p-3">
+                    {s.isTeamSubmission ? (
+                      <div>
+                        <Badge variant={s.myRole === 'leader' ? 'accent' : 'info'}>
+                          {s.myRole === 'leader' ? 'قائد' : 'عضو'}
+                        </Badge>
+                        {s.myContribution != null && (
+                          <div className="text-xs text-brand-500 font-bold mt-1">
+                            {s.myContribution}%
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-ink-400">—</span>
+                    )}
                   </td>
                   <td className="p-3">
                     <Badge variant="success">

@@ -23,9 +23,9 @@ export function SubmissionEditPage() {
   })
 
   const [form, setForm] = useState({
-    github_url: '',
-    live_url: '',
-    video_url: '',
+    githubUrl: '',
+    liveUrl: '',
+    videoUrl: '',
     notes: '',
   })
 
@@ -33,9 +33,9 @@ export function SubmissionEditPage() {
   useEffect(() => {
     if (submission) {
       setForm({
-        github_url: submission.githubUrl ?? '',
-        live_url: submission.liveUrl ?? '',
-        video_url: submission.videoUrl ?? '',
+        githubUrl: submission.githubUrl ?? '',
+        liveUrl: submission.liveUrl ?? '',
+        videoUrl: submission.videoUrl ?? '',
         notes: submission.notes ?? '',
       })
     }
@@ -119,8 +119,8 @@ export function SubmissionEditPage() {
               label="GitHub Repository"
               type="url"
               placeholder="https://github.com/username/project-name"
-              value={form.github_url}
-              onChange={(e) => set('github_url', e.target.value)}
+              value={form.githubUrl}
+              onChange={(e) => set('githubUrl', e.target.value)}
             />
             <Code size={16} className="absolute left-3 top-[38px] text-ink-400" />
           </div>
@@ -130,8 +130,8 @@ export function SubmissionEditPage() {
               label="Live Demo"
               type="url"
               placeholder="https://myproject.vercel.app"
-              value={form.live_url}
-              onChange={(e) => set('live_url', e.target.value)}
+              value={form.liveUrl}
+              onChange={(e) => set('liveUrl', e.target.value)}
             />
             <Globe size={16} className="absolute left-3 top-[38px] text-ink-400" />
           </div>
@@ -141,8 +141,8 @@ export function SubmissionEditPage() {
               label="Demo Video"
               type="url"
               placeholder="https://youtube.com/watch?v=..."
-              value={form.video_url}
-              onChange={(e) => set('video_url', e.target.value)}
+              value={form.videoUrl}
+              onChange={(e) => set('videoUrl', e.target.value)}
             />
             <Video size={16} className="absolute left-3 top-[38px] text-ink-400" />
           </div>

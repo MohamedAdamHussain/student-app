@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Trophy, Clock, Users, Plus, CheckCircle2, AlertCircle,
   Calendar, Info, ArrowLeft, UserPlus, Lock,
+  Lightbulb,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import {
   CheckCircle2, Star, Code, Globe, Video, FileText, Download,
   ExternalLink, Pencil, Share2, Award, Clock, ArrowLeft, History,
+  AlertTriangle,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -17,13 +18,20 @@ import { mockGetSubmission } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { formatRelative, cn } from '@/lib/utils'
 import { assetUrl } from '@/lib/api'
+import { toast } from 'sonner'
+import { TeamMembersCard, MyContributionBanner } from './TeamMembersCard'
 import type { AuditLog, User } from '@/types'
 
-/**
- * ✨ F5: استخراج اسم المراجِع من سجل التدقيق بأمان.
- * الـ backend يُرجع changed_by (رقم id) + changed_by_user (UserResource).
- * نُفضّل changedByUser، وإن لم يوجد نتحقق أن changedBy كائن User (بيانات قديمة/mock).
- */
+// =====================================================
+// ✨ P1-C PATCH: SubmissionDetailsPage
+// =====================================================
+// التغييرات:
+//   1) P1: معالجة 403 — لو طالب حاول /submissions/123 لتقديم لا يملكه،
+//      يرى skeleton للأبد. الآن: يعرض رسالة "غير مصرح" واضحة.
+//   2) P1: حذف hardcoded "90Soft Admin" في بطاقة "ملاحظات المسؤول" —
+//      استخدام reviewerName(log) مثلما فعل في بطاقة "راجعه".
+//   3) P1-A: حذف 'final' من badges — كل المهام 'hw' فقط.
+
 function reviewerName(log?: AuditLog): string | undefined {
   if (!log) return undefined
   const fromUser = log.changedByUser
@@ -37,16 +45,54 @@ export function SubmissionDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const submissionId = Number(id)
 
-  const { data: submission, isLoading } = useQuery({
+  const { data: submission, isLoading, error } = useQuery({
     queryKey: queryKeys.submission(submissionId),
     queryFn: () => mockGetSubmission(submissionId),
     enabled: !!submissionId,
   })
 
-  if (isLoading || !submission) {
+  // ✨ P1 PATCH: معالجة 403 — الـ backend يرفض رؤية تقديم لا يملكه الطالب (منع IDOR).
+  // قبل: كانت الصفحة تعرض skeleton إلى الأبد للزائر غير المصرّح.
+  if (isLoading) {
     return (
       <AppShell title="تفاصيل التقديم">
         <Skeleton className="h-96" />
+      </AppShell>
+    )
+  }
+
+  // ✨ P1 PATCH: معالجة الأخطاء (403 / 404 / شبكة)
+  if (error || !submission) {
+    const status = (error as { response?: { status?: number } })?.response?.status
+    const isForbidden = status === 403
+    const isNotFound = status === 404
+    return (
+      <AppShell title="تفاصيل التقديم">
+        <Card className="max-w-lg mx-auto mt-10 text-center">
+          <AlertTriangle
+            size={36}
+            className={cn(
+              'mx-auto mb-3',
+              isForbidden ? 'text-warning' : isNotFound ? 'text-ink-400' : 'text-danger',
+            )}
+          />
+          <h2 className="text-lg font-bold mb-2">
+            {isForbidden ? 'لا يمكن عرض هذا التقديم' : isNotFound ? 'التقديم غير موجود' : 'تعذّر تحميل التقديم'}
+          </h2>
+          <p className="text-sm text-ink-400 mb-5">
+            {isForbidden
+              ? 'هذا التقديم خاص بطالب آخر. لا يمكنك رؤية تقديمات غيرك.'
+              : isNotFound
+                ? 'ربما حُذف التقديم أو أن الرابط غير صحيح.'
+                : 'تعذّر تحميل بيانات التقديم. تحقق من اتصالك وحاول مرة أخرى.'}
+          </p>
+          <Link to="/submissions">
+            <Button variant="secondary" size="sm">
+              <ArrowLeft size={14} />
+              العودة للتقديمات
+            </Button>
+          </Link>
+        </Card>
       </AppShell>
     )
   }
@@ -58,6 +104,12 @@ export function SubmissionDetailsPage() {
     pending: <Badge variant="warning"><Clock size={12} /> معلّق</Badge>,
     rejected: <Badge variant="danger">مرفوض</Badge>,
   }[submission.status]
+
+  // ✨ P1 PATCH: استخدم اسم الـ reviewer من audit log (كان hardcoded "90Soft Admin")
+  const reviewedLog = submission.auditLogs?.find(
+    (log) => log.action === 'reviewed' || log.action === 'score_updated',
+  )
+  const reviewer = reviewerName(reviewedLog)
 
   return (
     <AppShell title="تفاصيل التقديم">
@@ -76,7 +128,7 @@ export function SubmissionDetailsPage() {
                 رجوع
               </Button>
             </Link>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary" size="sm" onClick={() => { const url = assetUrl(submission.fileUrl ?? submission.filePath); if (url) window.open(url, "_blank"); }}>
               <Download size={14} />
               تحميل
             </Button>
@@ -84,7 +136,8 @@ export function SubmissionDetailsPage() {
         }
       />
 
-      {/* Header Card */}
+      <MyContributionBanner submission={submission} />
+
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="mb-6">
           <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
@@ -98,8 +151,9 @@ export function SubmissionDetailsPage() {
               <div>
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h1 className="text-2xl font-extrabold">{title}</h1>
-                  <Badge variant={submission.task?.type === 'final' ? 'warning' : 'info'}>
-                    {submission.task?.type === 'final' ? 'Final' : submission.hackathon ? 'Hackathon' : 'HW'}
+                  {/* ✨ P1-A: حذف 'final' branch — Hackathon أو HW فقط */}
+                  <Badge variant={submission.hackathon ? 'warning' : 'info'}>
+                    {submission.hackathon ? 'Hackathon' : 'HW'}
                   </Badge>
                   {statusBadge}
                 </div>
@@ -118,7 +172,6 @@ export function SubmissionDetailsPage() {
               >
                 <div className="text-xs text-ink-500 uppercase">الدرجة النهائية</div>
                 <div className="text-success text-3xl font-extrabold leading-none">
-                  {/* ✨ P0-1: score أصلاً من 10 — لا قسمة */}
                   {submission.score!.toFixed(1)}
                   <span className="text-base opacity-70">/10</span>
                 </div>
@@ -139,17 +192,12 @@ export function SubmissionDetailsPage() {
             </div>
             <div>
               <div className="text-xs text-ink-400 mb-1 uppercase">راجعه</div>
-              {/* ✨ P1-7: استخدم اسم الـ reviewer من audit logs (كان hardcoded "90Soft Admin") */}
-              <div className="font-semibold">
-                {reviewerName(submission.auditLogs?.find((log) => log.action === 'reviewed' || log.action === 'score_updated')) ?? '—'}
-              </div>
+              <div className="font-semibold">{reviewer ?? '—'}</div>
             </div>
             <div>
               <div className="text-xs text-ink-400 mb-1 uppercase">تاريخ المراجعة</div>
               <div className="font-semibold">
-                {submission.auditLogs?.[0]?.createdAt
-                  ? formatRelative(submission.auditLogs[0].createdAt)
-                  : '—'}
+                {reviewedLog?.createdAt ? formatRelative(reviewedLog.createdAt) : '—'}
               </div>
             </div>
             <div>
@@ -197,8 +245,7 @@ export function SubmissionDetailsPage() {
               {submission.filePath && (
                 <SubmissionLink
                   icon={<FileText size={18} />}
-                  label="API Documentation (PDF)"
-                  // ✨ FIX #1: استخدم assetUrl لتحويل رابط الملف النسبي لمطلق
+                  label="ملف مرفق"
                   url={assetUrl(submission.fileUrl ?? submission.filePath) ?? '#'}
                   color="bg-danger-soft text-danger"
                   actionLabel="تحميل"
@@ -207,18 +254,18 @@ export function SubmissionDetailsPage() {
             </div>
 
             {submission.notes && (
-              <>
-                <div className="border-t border-ink-100 dark:border-ink-800 mt-4 pt-4">
-                  <div className="text-xs font-semibold text-ink-400 uppercase mb-2">
-                    ملاحظاتي للمُقيِّم
-                  </div>
-                  <p className="text-ink-600 dark:text-ink-300 text-sm leading-relaxed">
-                    {submission.notes}
-                  </p>
+              <div className="border-t border-ink-100 dark:border-ink-800 mt-4 pt-4">
+                <div className="text-xs font-semibold text-ink-400 uppercase mb-2">
+                  ملاحظاتي للمُقيِّم
                 </div>
-              </>
+                <p className="text-ink-600 dark:text-ink-300 text-sm leading-relaxed">
+                  {submission.notes}
+                </p>
+              </div>
             )}
           </Card>
+
+          <TeamMembersCard submission={submission} />
 
           {/* Skill Scores */}
           {submission.skillScores.length > 0 && (
@@ -246,21 +293,21 @@ export function SubmissionDetailsPage() {
             </Card>
           )}
 
-          {/* Reviewer Notes */}
-          {submission.auditLogs?.[0]?.notes && (
+          {/* ✨ P1 PATCH: Reviewer Notes — استخدم reviewer name بدل "90Soft Admin" */}
+          {reviewedLog?.notes && (
             <Card>
               <CardTitle className="mb-4">ملاحظات المسؤول</CardTitle>
               <div className="flex items-start gap-3">
-                <Avatar name="90Soft Admin" />
+                <Avatar name={reviewer ?? 'المسؤول'} />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-sm">90Soft Admin</span>
+                    <span className="font-semibold text-sm">{reviewer ?? 'المسؤول'}</span>
                     <span className="text-xs text-ink-400">
-                      · راجع {submission.auditLogs[0].createdAt && formatRelative(submission.auditLogs[0].createdAt)}
+                      · راجع {reviewedLog.createdAt && formatRelative(reviewedLog.createdAt)}
                     </span>
                   </div>
                   <div className="p-3 bg-ink-50 dark:bg-ink-800/50 rounded-md text-sm leading-relaxed whitespace-pre-line">
-                    {submission.auditLogs[0].notes}
+                    {reviewedLog.notes}
                   </div>
                 </div>
               </div>
@@ -305,7 +352,6 @@ export function SubmissionDetailsPage() {
                           )}
                         </div>
                         <div className="text-xs text-ink-400">
-                          {/* ✨ F5: changedBy قد يكون رقماً (id) من الـ API — استخدم changedByUser للاسم */}
                           بواسطة {reviewerName(log) ?? '—'} · {formatRelative(log.createdAt)}
                         </div>
                       </div>
@@ -319,7 +365,6 @@ export function SubmissionDetailsPage() {
 
         {/* Right */}
         <aside className="space-y-5">
-          {/* Status Summary */}
           <Card className={cn(
             isAccepted
               ? 'bg-success-soft border-success-border'
@@ -346,11 +391,9 @@ export function SubmissionDetailsPage() {
             </div>
           </Card>
 
-          {/* Actions */}
           <Card>
             <CardTitle className="mb-4">إجراءات</CardTitle>
             <div className="flex flex-col gap-2">
-              {/* ✨ P0-2: تعديل التقديم المباشر لو pending */}
               {submission.status === 'pending' && (
                 <Link to={`/submissions/${submission.id}/edit`}>
                   <Button variant="secondary" block>
@@ -359,7 +402,6 @@ export function SubmissionDetailsPage() {
                   </Button>
                 </Link>
               )}
-              {/* لو تمت المراجعة، التعديل يتطلب إعادة فتح */}
               {submission.status !== 'pending' && (
                 <Button variant="secondary" block disabled>
                   <Pencil size={14} />
@@ -367,21 +409,27 @@ export function SubmissionDetailsPage() {
                 </Button>
               )}
               {isAccepted && (
-                <Link to="/profile">
+                <Link to="/profile/edit" state={{ preselectFeaturedId: submission.id }}>
                   <Button block>
                     <Star size={14} />
                     جعله المشروع المميز
                   </Button>
                 </Link>
               )}
-              <Button variant="ghost" block>
+              <Button variant="ghost" block onClick={() => {
+                  const url = window.location.href
+                  if (navigator.share) {
+                    navigator.share({ title: 'تقديم GradShow', url }).catch(() => {})
+                  } else {
+                    navigator.clipboard?.writeText(url).then(() => toast.success('تم نسخ الرابط')).catch(() => toast.info(url))
+                  }
+                }}>
                 <Share2 size={14} />
                 مشاركة الرابط
               </Button>
             </div>
           </Card>
 
-          {/* Task Info */}
           {submission.task && (
             <Card>
               <CardTitle className="mb-4">معلومات المهمة</CardTitle>
@@ -394,9 +442,8 @@ export function SubmissionDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-500">النوع</span>
-                  <Badge variant={submission.task.type === 'final' ? 'warning' : 'info'}>
-                    {submission.task.type === 'final' ? 'Final' : 'HW'}
-                  </Badge>
+                  {/* ✨ P1-A: حذف 'final' branch */}
+                  <Badge variant="info">HW</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-ink-500">نوع العمل</span>

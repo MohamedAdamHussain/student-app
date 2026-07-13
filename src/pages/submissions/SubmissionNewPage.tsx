@@ -18,6 +18,15 @@ import { validateFile, getFileExtension } from '@/lib/fileValidation'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
+// =====================================================
+// ✨ P1-B PATCH: SubmissionNewPage
+// =====================================================
+// التغييرات:
+//   1) P0: double-submit protection عبر submitting state (منع الإرسال المزدوج)
+//   2) P1-A: حذف 'final' من نوع المهمة — كل المهام 'hw' فقط
+//   3) P1-A: تحديث الوصف "HW أو Final Project" → "HW"
+//   4) P1-A: تحديث الـ option text — حذف branch الخاص بـ 'final'
+
 export function SubmissionNewPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -27,7 +36,6 @@ export function SubmissionNewPage() {
 
   const createMutation = useCreateSubmission()
 
-  // ✨ Stage 7: استخرج data من PaginatedResponse
   const tasks = tasksData?.data ?? []
   const hackathons = hackathonsData?.data ?? []
 
@@ -39,19 +47,23 @@ export function SubmissionNewPage() {
   const [liveUrl, setLiveUrl] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [notes, setNotes] = useState('')
-  // ✨ P0-3: file state فعلي (كان decorative فقط)
   const [file, setFile] = useState<File | null>(null)
+
+  // ✨ P0 PATCH: double-submit protection
+  // قبل: كان disabled={createMutation.isPending} فقط. لكن isPending يتغير
+  // بعد بدء الـ mutation. لو ضغط الطالب مرتين بسرعة (أو Enter مرتين)،
+  // يُرسل الطلبان قبل أن يصبح isPending = true.
+  // الآن: submitting state يُضبط قبل استدعاء mutate مباشرة.
+  const [submitting, setSubmitting] = useState(false)
 
   const selectedTask = tasks?.find((t) => t.id === Number(taskId))
   const videoRequired = type === 'task' && selectedTask?.videoRequired
 
-  // ✨ P0-1: فحص deadline قبل التقديم
   const isDeadlinePassed = () => {
     if (type === 'task' && selectedTask?.batch?.endDate) {
       return new Date(selectedTask.batch.endDate) < new Date()
     }
     if (type === 'hackathon' && hackathonId) {
-      // ✨ P2-1: استخدم Hackathon type بدلاً من any
       const h = hackathons?.find((h) => h.id === Number(hackathonId))
       return h ? new Date(h.deadline) < new Date() : false
     }
@@ -61,13 +73,14 @@ export function SubmissionNewPage() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
 
-    // ✨ P0-1: منع التقديم بعد deadline
+    // ✨ P0 PATCH: حارس مبكر ضد double-submit
+    if (submitting || createMutation.isPending) return
+
     if (isDeadlinePassed()) {
       toast.error('انتهى موعد التقديم على هذه المهمة. لا يمكن التقديم بعد انتهاء الدفعة.')
       return
     }
 
-    // Validation
     if (type === 'task' && !taskId) {
       toast.error('اختر مهمة للتسليم عليها')
       return
@@ -76,7 +89,6 @@ export function SubmissionNewPage() {
       toast.error('اختر هاكاثوناً للتسليم عليه')
       return
     }
-    // ✨ P0-3: الملف يُحسب كـ format صالح (لم يعد decorative)
     if (!githubUrl && !liveUrl && !videoUrl && !file) {
       toast.error('يجب تقديم صيغة واحدة على الأقل (GitHub، Live، فيديو، أو ملف)')
       return
@@ -85,15 +97,12 @@ export function SubmissionNewPage() {
       toast.error('هذه المهمة تتطلب رابط فيديو')
       return
     }
-    // ✨ P0-3: فحص موحّد لحجم الملف (10MB max)
     if (file && !validateFile(file, {
-      // أنواع MIME واسعة لأن المتصفحات لا تُحدّد نوع MIME لكل الصيغ
       types: ['application/pdf', 'application/zip', 'application/x-zip-compressed', 'application/octet-stream', ''],
       maxSizeMB: 10,
       label: 'الملف',
     })) return
 
-    // ✨ P0-3: فحص نوع الملف بالامتداد (أدق من MIME لأنواع مثل .rar/.7z/.docx)
     const allowedExtensions = ['pdf', 'zip', 'rar', '7z', 'doc', 'docx', 'txt', 'md', 'json', 'csv']
     if (file) {
       const ext = getFileExtension(file)
@@ -103,20 +112,25 @@ export function SubmissionNewPage() {
       }
     }
 
-    createMutation.mutate({
-      taskId: type === 'task' ? Number(taskId) : null,
-      hackathonId: type === 'hackathon' ? Number(hackathonId) : null,
-      teamId: teamId ? Number(teamId) : null,
-      githubUrl: githubUrl || null,
-      liveUrl: liveUrl || null,
-      videoUrl: videoUrl || null,
-      notes: notes || null,
-      // ✨ P0-3: تمرير الملف فعلياً للـ service
-      file: file ?? undefined,
-    })
+    // ✨ P0 PATCH: اضبط submitting قبل mutate، أفرغه في onSettled
+    setSubmitting(true)
+    createMutation.mutate(
+      {
+        taskId: type === 'task' ? Number(taskId) : null,
+        hackathonId: type === 'hackathon' ? Number(hackathonId) : null,
+        teamId: teamId ? Number(teamId) : null,
+        githubUrl: githubUrl || null,
+        liveUrl: liveUrl || null,
+        videoUrl: videoUrl || null,
+        notes: notes || null,
+        file: file ?? undefined,
+      },
+      {
+        onSettled: () => setSubmitting(false),
+      },
+    )
   }
 
-  // Checklist
   const checklist = [
     { done: !!(type === 'task' ? taskId : hackathonId), label: 'اخترت مهمة أو هاكاثون' },
     { done: !!(githubUrl || liveUrl || file), label: 'صيغة واحدة على الأقل (GitHub, Live, أو ملف)' },
@@ -164,7 +178,8 @@ export function SubmissionNewPage() {
                 <input type="radio" checked={type === 'task'} onChange={() => {}} className="text-brand-500" />
                 <div>
                   <div className="font-semibold text-sm">مهمة (Task)</div>
-                  <div className="text-xs text-ink-400">HW أو Final Project</div>
+                  {/* ✨ P1-A: حذف "HW أو Final Project" — كل المهام HW فقط */}
+                  <div className="text-xs text-ink-400">واجب منزلي (HW)</div>
                 </div>
               </button>
               <button
@@ -196,7 +211,8 @@ export function SubmissionNewPage() {
                   <option value="" disabled>اختر المهمة</option>
                   {tasks?.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.title} ({t.type === 'final' ? 'Final' : 'HW'})
+                      {/* ✨ P1-A: حذف branch الخاص بـ 'final' — كلها HW */}
+                      {t.title} (HW)
                     </option>
                   ))}
                 </Select>
@@ -270,7 +286,6 @@ export function SubmissionNewPage() {
               placeholder="https://myproject.vercel.app"
             />
 
-            {/* ✨ P0-3: رفع ملف فعلي (لم يعد decorative) */}
             <div className="mb-5">
               <label className="block text-[13px] font-semibold mb-1.5">ملف مرفق (PDF, ZIP)</label>
               <input
@@ -356,8 +371,12 @@ export function SubmissionNewPage() {
 
           {/* Actions */}
           <div className="flex gap-3 mb-6">
-            <Button type="submit" size="lg" disabled={createMutation.isPending}>
-              {createMutation.isPending ? (
+            <Button
+              type="submit"
+              size="lg"
+              disabled={submitting || createMutation.isPending}
+            >
+              {submitting || createMutation.isPending ? (
                 <>
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   جاري التسليم...
@@ -369,7 +388,6 @@ export function SubmissionNewPage() {
                 </>
               )}
             </Button>
-            {/* ✨ P1-6: زر "حفظ كمسودة" مُزال — لا يوجد drafts API في الـ backend */}
             <Link to="/submissions">
               <Button type="button" variant="ghost" size="lg">إلغاء</Button>
             </Link>
@@ -378,15 +396,13 @@ export function SubmissionNewPage() {
 
         {/* Right Sidebar */}
         <aside className="space-y-5">
-          {/* Selected Task Summary */}
           {selectedTask && (
             <Card>
               <CardTitle className="mb-4">المهمة المختارة</CardTitle>
               <div className="p-3 bg-warning-soft border border-warning-border rounded-md">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <Badge variant={selectedTask.type === 'final' ? 'warning' : 'info'}>
-                    {selectedTask.type === 'final' ? 'Final' : 'HW'}
-                  </Badge>
+                  {/* ✨ P1-A: حذف 'final' branch */}
+                  <Badge variant="info">HW</Badge>
                   {selectedTask.videoRequired && (
                     <Badge variant="info">فيديو إلزامي</Badge>
                   )}
@@ -412,7 +428,6 @@ export function SubmissionNewPage() {
             </Card>
           )}
 
-          {/* Checklist */}
           <Card>
             <CardTitle className="mb-4">قائمة التحقق</CardTitle>
             <div className="flex flex-col gap-3">
@@ -435,7 +450,6 @@ export function SubmissionNewPage() {
             </div>
           </Card>
 
-          {/* Warning */}
           <Card className="bg-warning-soft border-warning-border">
             <div className="flex items-center gap-2 mb-2">
               <AlertTriangle size={18} className="text-warning" />

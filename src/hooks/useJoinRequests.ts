@@ -29,17 +29,6 @@ export function useTeamsForTeamable(teamableType: 'task' | 'hackathon' | null, t
 // نمط مطابق لـ useSubmissions: mutationFn = mock facade،
 // onSuccess → invalidate + toast، onError → extractApiMessage + toast.
 
-/** عرض محدود لفريق (لغير الأعضاء). يُفعّل عند توفر id. */
-export function useTeamPreview(teamId: number | null) {
-  return useQuery({
-    queryKey: teamId ? queryKeys.teamPreview(teamId) : ['teams', 'preview', 'none'],
-    queryFn: () => mockPreviewTeam(teamId!),
-    enabled: teamId != null,
-    staleTime: 30 * 1000, // حالة canRequestJoin تتغير — حدّ قصير
-  })
-}
-
-/** طلبات الطالب الحالي (كل الحالات). */
 export function useMyJoinRequests() {
   return useQuery({
     queryKey: queryKeys.myJoinRequests,

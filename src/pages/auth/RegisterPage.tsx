@@ -26,6 +26,11 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (form.password.length < 8) {
+      toast.error('كلمة المرور يجب أن تكون 8 أحرف على الأقل')
+      return
+    }
+
     if (form.password !== form.passwordConfirmation) {
       toast.error('كلمتا المرور غير متطابقتين')
       return

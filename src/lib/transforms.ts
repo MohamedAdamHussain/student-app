@@ -1,4 +1,4 @@
-import type { User, StudentProfile, CompanyProfile, Batch, Submission, Team, TeamableType } from '@/types'
+import type { User, StudentProfile, CompanyProfile, Batch, Submission, SubmissionTeamMember, Team, TeamableType } from '@/types'
 
 /**
  * تحويل snake_case إلى camelCase لمفتاح واحد
@@ -103,7 +103,11 @@ export function transformStudentProfile(rawProfile: any): StudentProfile {
 }
 
 /**
- * تحويل استجابة Submission (تشمل relations)
+ * تحويل استجابة Submission (تشمل relations + team_members + my_contribution).
+ *
+ * ✨ TEAM EVALUATION: نستخدم transformToCamelCase الذي يحوّل كل المفاتيح
+ * تلقائياً (team_members → teamMembers, my_contribution → myContribution, إلخ).
+ * transformToCamelCase recursive، لذا user داخل team_members يُحوَّل أيضاً.
  */
 export function transformSubmission(rawSubmission: any): Submission {
   return transformToCamelCase<Submission>(rawSubmission)

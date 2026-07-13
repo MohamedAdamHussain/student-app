@@ -2,19 +2,13 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 
 // In production this would be Laravel backend URL
 // ✨ FIX: استخدم relative '/api' ليشتغل عبر Vite proxy في التطوير
-// (بدون proxy ستحتاج VITE_API_URL=http://localhost:8000/api)
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 
 // ✨ FIX #1: قاعدة روابط الـ assets (avatars, CVs, submission files)
-// الـ backend يُرجِع روابط نسبية مثل '/storage/avatars/x.jpg' عبر Storage::url().
-// في التطوير مع Vite proxy → نُبقيها نسبية (الـ proxy يوجّهها للـ backend).
-// في الإنتاج → اضبط VITE_STORAGE_URL=https://api.example.com
 const STORAGE_BASE = import.meta.env.VITE_STORAGE_URL ?? ''
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  // ✨ FIX #6: لا نحتاج withCredentials — نستخدم Bearer Token (وليس cookie auth)
-  // إزالته تقلّل preflight CORS requests بلا داعٍ
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -22,21 +16,13 @@ export const api = axios.create({
 })
 
 /**
- * ✨ FIX #1: تحويل رابط نسبي للـ asset (avatar, CV, submission file)
- * لرابط قابل للتحميل في المتصفح.
- *
- * - null/undefined → null
- * - 'http(s)://...' → كما هو
- * - '/storage/...' → prepend STORAGE_BASE (لو محدّد في الإنتاج)
- * - 'storage/...' → prepend STORAGE_BASE + '/'
- * - 'cvs/x.pdf' (raw path) → prepend STORAGE_BASE + '/storage/'
+ * ✨ FIX #1: تحويل رابط نسبي للـ asset لرابط قابل للتحميل في المتصفح.
  */
 export function assetUrl(path?: string | null): string | null {
   if (!path) return null
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/storage/')) return `${STORAGE_BASE}${path}`
   if (path.startsWith('storage/')) return `${STORAGE_BASE}/${path}`
-  // raw path بدون /storage/ prefix
   return `${STORAGE_BASE}/storage/${path}`
 }
 
@@ -52,39 +38,45 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 )
 
-// Response interceptor: handle auth errors + extract Laravel error messages
+// =====================================================
+// ✨ P0-B PATCH: 401 handling عبر event بدلاً من window.location
+// =====================================================
+// المشكلة السابقة: أي 401 (حتى من refetch صامت) كان يعيد تحميل التطبيق
+// بالكامل (window.location.href = '/login'). هذا يفقد الـ React Query cache
+// + أي إدخال غير محفوظ في النماذج.
+//
+// الحل: نُطلق CustomEvent 'auth:unauthorized'، ويستمع له AuthContext
+// ويضبط state محلي لـ force-redirect عبر React Router (لا reload).
+// النموذج يبقى في الذاكرة، ولو عاد المستخدم بعد login، يرى ما كان يكتبه.
+
+const AUTH_UNAUTHORIZED_EVENT = 'gradshow:auth-unauthorized'
+
+ResponseInterceptorSetup: {
+  // لا شيء — مجرد label للتوثيق
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<{ message?: string; errors?: Record<string, string[]> }>) => {
     const status = error.response?.status
 
-    // ✨ 401 Unauthorized → logout & redirect to login
+    // ✨ 401 Unauthorized → أطلِق event بدل window.location.href
+    // الـ AuthContext يستمع له ويوجّه عبر React Router (لا reload).
     if (status === 401) {
       localStorage.removeItem('gradshow_token')
-      localStorage.removeItem('gradshow_user')
+      // ✨ P0-C: لا نحذف gradshow_user من هنا — AuthContext يتكفّل بتنظيف الـ state
+      // (لو حذفناه هنا + استمعنا له في AuthContext، نتجنب race conditions)
+      // نطلق event واحد فقط لكل 401 (لا نطلق لو كنا في /login لتجنب loop)
       if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login'
+        window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT))
       }
     }
 
-    // ✨ 403 Forbidden → redirect to unauthorized page
-    // (لو الطالب حاول يفتح endpoint خاص بالأدمن أو العكس)
+    // ✨ 403 Forbidden → toast فقط (الصفحة تعالج الخطأ محلياً)
     if (status === 403) {
-      const currentPath = window.location.pathname
-      // لا نُعيد التوجيه لو كنا بالفعل في صفحة unauthorized
-      if (!currentPath.startsWith('/unauthorized')) {
-        // نُمرر رسالة الخطأ للمستخدم قبل التوجيه
-        const msg = error.response?.data?.message ?? 'غير مصرح'
-        console.warn('🔒 403 Forbidden:', msg)
-
-        // ✨ معالجة ذكية: لو طالب حاول يفتح admin endpoint
-        // نوجهه لصفحة unauthorized بدلاً من تركه في صفحة فارغة
-        if (currentPath.startsWith('/admin')) {
-          window.location.href = '/unauthorized'
-        }
-        // لو في صفحة student و حصل 403 (مثلاً يفتح submission لطالب آخر)
-        // نعرض toast فقط (الصفحة نفسها يجب أن تعالج الخطأ)
-      }
+      const msg = error.response?.data?.message ?? 'غير مصرح'
+      console.warn('🔒 403 Forbidden:', msg)
+      // لا redirect هنا — الصفحة تعرض رسالة مناسبة بناءً على الحالة
     }
 
     // ✨ 419 CSRF → رسالة واضحة
@@ -108,8 +100,7 @@ api.interceptors.response.use(
 
     // Attach validation errors for forms to use
     if (validationErrors) {
-      (error as any).validationErrors = validationErrors
-      // First validation error as main message
+      ;(error as any).validationErrors = validationErrors
       const firstError = Object.values(validationErrors)[0]?.[0]
       if (firstError) {
         error.message = firstError
@@ -125,14 +116,13 @@ api.interceptors.response.use(
   },
 )
 
+// تصدير اسم الـ event ليستخدمه AuthContext
+export { AUTH_UNAUTHORIZED_EVENT }
+
 // =====================================================
 // Helpers for Laravel pagination responses
 // =====================================================
 
-/**
- * Laravel paginate returns: { data: [], links: {}, meta: { current_page, ... } }
- * This helper extracts just the data array.
- */
 export function extractPaginatedData<T>(response: unknown): T[] {
   if (Array.isArray(response)) return response
   if (response && typeof response === 'object' && 'data' in response) {
@@ -142,10 +132,6 @@ export function extractPaginatedData<T>(response: unknown): T[] {
   return []
 }
 
-/**
- * ✨ Stage 7: استخراج data + meta من استجابة Laravel paginate
- * للقوائم التي تحتاج pagination controls
- */
 export interface PaginationMeta {
   current_page: number
   last_page: number
@@ -161,7 +147,6 @@ export interface PaginatedResponse<T> {
 }
 
 export function extractPaginated<T>(response: unknown): PaginatedResponse<T> {
-  // ✨ array مباشرة (من Skill::all() مثلاً) — نُحوّل لـ paginate شكل
   if (Array.isArray(response)) {
     return {
       data: response,
@@ -176,7 +161,6 @@ export function extractPaginated<T>(response: unknown): PaginatedResponse<T> {
     }
   }
 
-  // ✨ شكل Laravel paginate {data: [], meta: {...}}
   if (response && typeof response === 'object' && 'data' in response) {
     const obj = response as { data: T[]; meta?: PaginationMeta }
     return {

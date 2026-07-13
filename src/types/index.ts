@@ -1,6 +1,10 @@
 // =====================================================
 // GradShow — Domain Types (matching Laravel models)
 // =====================================================
+//
+// ✨ P1-A PATCH: حذف 'final' من TaskType.
+// الـ backend (TaskRequest.php) يقبل فقط 'hw'. النوع 'final' كان محجوزاً
+// للتوافق مع الكود القديم، لكنه لم يعد يستخدم — الـ Final = الهاكاثون نفسه.
 
 export type UserRole = 'student' | 'company' | 'admin'
 
@@ -11,9 +15,7 @@ export interface User {
   role: UserRole
   avatar: string | null
   batchId: number | null
-  // ✨ B6: حالة التحقق من البريد (null = غير مُتحقَّق — تذكيري فقط، لا حجب)
   emailVerifiedAt?: string | null
-  // ✨ B4: حالة تفعيل الحساب (الأدمن يعطّل/يفعّل) — لو false لا يمكن تسجيل الدخول
   isActive?: boolean | null
   createdAt: string
   batch?: Batch | null
@@ -27,7 +29,6 @@ export interface Batch {
   status: 'active' | 'completed'
   startDate: string
   endDate: string
-  // ✨ B3: أعمدة تسجيل الدفعات
   isRegistrationOpen?: boolean | null
   isDefaultForNewStudents?: boolean | null
   usersCount?: number
@@ -72,9 +73,8 @@ export interface CompanyProfile {
   logo: string | null
 }
 
-// ✨ الـ Tasks = "hw" فقط — الـ Final = الهاكاثون نفسه
-// ('final' محفوظة للتوافق مع الكود القديم — لن تُستخدم في المهام الجديدة)
-export type TaskType = 'hw' | 'final'
+// ✨ P1-A: الـ Tasks = "hw" فقط — الـ Final = الهاكاثون نفسه
+export type TaskType = 'hw'
 
 export interface Task {
   id: number
@@ -111,7 +111,6 @@ export interface Hackathon {
   myScore?: number | null
 }
 
-// ✨ P2-1: teamableType كـ literal union لتمكين discriminated union pattern
 export type TeamableType = 'task' | 'hackathon'
 
 export interface Team {
@@ -133,10 +132,6 @@ export interface TeamMember {
   user: User
 }
 
-// =====================================================
-// ✨ Join Requests — طلبات الانضمام للفرق (موافقة القائد)
-// =====================================================
-
 export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export interface JoinRequest {
@@ -150,10 +145,6 @@ export interface JoinRequest {
   user?: User
 }
 
-/**
- * ✨ عرض محدود لفريق لغير الأعضاء (preview endpoint).
- * لا يكشف قائمة الأعضاء — فقط اسم القائد وعدد الأعضاء + canRequestJoin.
- */
 export interface TeamPreview {
   id: number
   name: string
@@ -167,6 +158,22 @@ export interface TeamPreview {
 }
 
 export type SubmissionStatus = 'pending' | 'accepted' | 'rejected'
+
+export interface SubmissionTeamMember {
+  id: number
+  submissionId: number
+  userId: number
+  teamId: number | null
+  isLeader: boolean
+  contributionPercentage: number | null
+  contributionNotes: string | null
+  user?: {
+    id: number
+    name: string
+    avatar: string | null
+  }
+  createdAt: string
+}
 
 export interface Submission {
   id: number
@@ -190,6 +197,12 @@ export interface Submission {
   team?: Team | null
   skillScores: SkillScore[]
   auditLogs?: AuditLog[]
+  isTeamSubmission?: boolean
+  participantsCount?: number
+  teamMembers?: SubmissionTeamMember[]
+  myContribution?: number | null
+  myContributionNotes?: string | null
+  myRole?: 'leader' | 'member' | null
   createdAt: string
   updatedAt?: string
 }
@@ -205,8 +218,6 @@ export interface SkillScore {
 export interface AuditLog {
   id: number
   submissionId: number
-  // ✨ F5: الـ backend يُرجع 'changed_by' (رقم id) + 'changed_by_user' (UserResource).
-  // transformToCamelCase → changedBy (number) + changedByUser (User). استخدم changedByUser للاسم.
   changedBy?: User | number
   changedByUser?: User
   action: string
@@ -238,7 +249,6 @@ export interface AuthResponse {
   token: string
 }
 
-// ✨ Stage 7: Pagination support
 export interface PaginationMeta {
   current_page: number
   last_page: number
@@ -262,10 +272,6 @@ export interface DashboardStats {
   rankInBatch: number | null
   skillsCount?: number
 }
-
-// =====================================================
-// ✨ Feature Proposal Types
-// =====================================================
 
 export type ProposalStatus =
   | 'pending'

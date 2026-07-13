@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
-import { ApiDebug } from '@/components/common/ApiDebug'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -29,6 +28,7 @@ export function TeamDetailsPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+  const navigate = useNavigate()  // ✨ P0: استبدل window.location بـ navigate
   // ✨ طلبات الانضمام (للقائد: المعلّقة فقط).
   const { data: pendingRequests } = useTeamJoinRequests(teamId)
   const approveMutation = useApproveJoinRequest(teamId)
@@ -147,13 +147,6 @@ export function TeamDetailsPage() {
         }
       />
 
-      <ApiDebug
-        label={`GET /teams/${teamId}`}
-        transformedData={team}
-        error={error}
-        expectedFields={['teamableType', 'teamableId', 'teamMembers', 'teamable']}
-      />
-
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -224,7 +217,7 @@ export function TeamDetailsPage() {
               {isLeader && hasEmptySlot && (
                 <Button size="sm" onClick={() => document.getElementById('invite-section')?.scrollIntoView({ behavior: 'smooth' })}>
                   <Plus size={14} />
-                  دعوة عضو
+                  طلبات الانضمام
                 </Button>
               )}
             </div>
@@ -292,7 +285,7 @@ export function TeamDetailsPage() {
             </div>
           </Card>
 
-          {/* ✨ طلبات الانضمام — للقائد فقط (بدل بطاقة "دعوة عضو" الوهمية). */}
+          {/* ✨ طلبات الانضمام — للقائد فقط (بدل بطاقة "طلبات الانضمام" الوهمية). */}
           {isLeader && hasEmptySlot && (
             <Card id="invite-section">
               <CardTitle className="mb-2">طلبات الانضمام</CardTitle>
@@ -522,9 +515,10 @@ export function TeamDetailsPage() {
                     variant: 'danger',
                   })
                   if (ok) {
-                    removeMemberMutation.mutate(user!.id)
-                    // ✨ إعادة توجيه لصفحة الفرق بعد المغادرة
-                    setTimeout(() => window.location.href = '/teams', 500)
+                    // ✨ P0 PATCH: استخدم navigate بدل window.location — يحافظ على SPA + cache
+                    removeMemberMutation.mutate(user!.id, {
+                      onSuccess: () => navigate('/teams', { replace: true }),
+                    })
                   }
                 }}
                 disabled={removeMemberMutation.isPending}

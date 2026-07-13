@@ -25,7 +25,7 @@ export function HackathonsListPage() {
   // ✨ Stage 7: PaginatedResponse
   const { data: hackathonsData, isLoading } = useQuery({
     queryKey: [...queryKeys.hackathons, page],
-    queryFn: () => mockGetHackathons(page),
+    queryFn: () => mockGetHackathons({ page }),
   })
 
   const hackathons = hackathonsData?.data ?? []

@@ -95,7 +95,7 @@ export function useUploadAvatar() {
     mutationFn: (file: File) => mockUploadAvatar(file),
     onSuccess: (data) => {
       // ✨ حدّث cache الـ profile فوراً + أعد جلب الـ user من AuthContext
-      queryClient.setQueryData(queryKeys.profile, data.user.studentProfile)
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile })
       invalidateUser()
       toast.success('تم تحديث الصورة الشخصية ✓')
     },

@@ -20,7 +20,6 @@ import {
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { StatCard } from '@/components/common/StatCard'
-import { ApiDebug } from '@/components/common/ApiDebug'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -30,6 +29,7 @@ import { useAuth } from '@/context/AuthContext'
 import { mockGetDashboardStats, mockGetTasks, mockGetSubmissions } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { daysUntil, formatRelative } from '@/lib/utils'
+import { TeamBadge } from './submissions/TeamBadge'
 import type { Task, Submission, SubmissionStatus } from '@/types'
 import { useState, useEffect } from 'react'
 
@@ -54,21 +54,9 @@ export function DashboardPage() {
     localStorage.setItem('gradshow_email_banner_dismissed_until', String(Date.now() + sevenDaysMs))
   }
 
-  // ✨ استعادة حالة الإخفاء من localStorage عند mount
-  useEffect(() => {
-    const dismissedUntil = localStorage.getItem('gradshow_email_banner_dismissed_until')
-    if (dismissedUntil) {
-      const until = Number(dismissedUntil)
-      if (Date.now() < until) {
-        setEmailBannerDismissed(true)
-      } else {
-        // انتهت صلاحية الإخفاء → احذفه
-        localStorage.removeItem('gradshow_email_banner_dismissed_until')
-      }
-    }
-  }, [])
 
-  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: queryKeys.stats,
     queryFn: mockGetDashboardStats,
   })
@@ -172,22 +160,6 @@ export function DashboardPage() {
           </Link>
         </div>
       </motion.div>
-
-      {/* ✨ تتبع الربط — يظهر فقط في وضع التطوير */}
-      <ApiDebug
-        label="GET /dashboard/stats"
-        transformedData={stats}
-        error={statsError}
-        expectedFields={['totalSubmissions', 'accepted', 'pending', 'averageScore']}
-      />
-      <ApiDebug
-        label="GET /tasks (for upcoming)"
-        transformedData={tasks}
-      />
-      <ApiDebug
-        label="GET /submissions (recent)"
-        transformedData={submissions}
-      />
 
       {/* Stats Grid — ✨ استخدام camelCase مع fallback */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
@@ -367,9 +339,27 @@ function SubmissionRow({ submission }: { submission: Submission }) {
       to={`/submissions/${submission.id}`}
       className="flex items-center justify-between gap-3 py-3 border-b border-ink-100 dark:border-ink-800 last:border-0 hover:bg-ink-50 dark:hover:bg-ink-800/50 -mx-2 px-2 rounded-md transition-colors"
     >
-      <div className="min-w-0">
-        <div className="font-semibold text-sm truncate">{title}</div>
-        <div className="text-xs text-ink-400">{formatRelative(submission.createdAt)}</div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="font-semibold text-sm truncate">{title}</span>
+          {/* ✨ TEAM EVALUATION: بادج "مشروع جماعي / فردي" */}
+          <TeamBadge submission={submission} />
+        </div>
+        <div className="flex items-center gap-2 text-xs text-ink-400 flex-wrap">
+          <span>{formatRelative(submission.createdAt)}</span>
+          {/* ✨ TEAM EVALUATION: عرض "مساهمتك" للمشاريع الجماعية */}
+          {submission.isTeamSubmission && submission.myContribution != null && (
+            <span className="text-brand-500 font-medium">
+              · مساهمتك: {submission.myContribution}%
+            </span>
+          )}
+          {/* ✨ TEAM EVALUATION: عرض دور المستخدم في الفريق */}
+          {submission.isTeamSubmission && submission.myRole && (
+            <span className="text-accent-500">
+              · {submission.myRole === 'leader' ? 'قائد' : 'عضو'}
+            </span>
+          )}
+        </div>
       </div>
       <Badge variant={status.variant}>
         {status.icon}

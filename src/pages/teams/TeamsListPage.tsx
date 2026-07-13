@@ -7,8 +7,7 @@ import {
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
-import { ApiDebug } from '@/components/common/ApiDebug'
-import { Card } from '@/components/ui/Card'
+import { Card, CardTitle } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
@@ -35,7 +34,7 @@ export function TeamsListPage() {
   const preselectedHackathonId = searchParams.get('hackathon_id')
   const preselectedTaskId = searchParams.get('task_id')
 
-  const { data: teams, isLoading, error: teamsError } = useQuery({
+  const { data: teams, isLoading } = useQuery({
     queryKey: queryKeys.teams,
     queryFn: mockGetTeams,
   })
@@ -94,19 +93,6 @@ export function TeamsListPage() {
             إنشاء فريق جديد
           </Button>
         }
-      />
-
-      {/* ✨ تتبع الربط — يظهر فقط في وضع التطوير */}
-      <ApiDebug
-        label="GET /my-teams"
-        transformedData={teams}
-        error={teamsError}
-        expectedFields={['teamableType', 'teamableId', 'teamMembers']}
-      />
-      <ApiDebug
-        label="GET /hackathons"
-        transformedData={hackathons}
-        expectedFields={['isTeam', 'maxTeamSize']}
       />
 
       {/* ✨ طلبات الانضمام المُرسَلة — حالة الطلبات المعلّقة/المقبولة/المرفوضة. */}

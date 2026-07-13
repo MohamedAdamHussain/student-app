@@ -24,7 +24,7 @@ import { mockGetTask } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { useTeamsForTeamable, useMyJoinRequests } from '@/hooks/useJoinRequests'
 import { JoinRequestModal } from '@/components/teams/JoinRequestModal'
-import { daysUntil, gradientFor } from '@/lib/utils'
+import { daysUntil, gradientFor, formatDate } from '@/lib/utils'
 import type { TeamPreview } from '@/types'
 
 export function TaskDetailsPage() {
@@ -53,7 +53,7 @@ export function TaskDetailsPage() {
     )
   }
 
-  const isFinal = task.type === 'final'
+  // ✨ P1-A: تم حذف 'final' — كل المهام 'hw' فقط
   const days = daysUntil(task.batch?.endDate ?? task.createdAt)
   const hasSubmitted = !!task.mySubmissionStatus
 
@@ -91,9 +91,8 @@ export function TaskDetailsPage() {
         <Card className="mb-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={isFinal ? 'warning' : 'info'}>
-                {isFinal ? 'Final' : 'HW'}
-              </Badge>
+              {/* ✨ P1-A: حذف 'final' — كل المهام HW فقط */}
+              <Badge variant="info">HW</Badge>
               {task.videoRequired && (
                 <Badge variant="info">
                   <Video size={12} />
@@ -121,7 +120,7 @@ export function TaskDetailsPage() {
               <div className="text-xs text-ink-400 uppercase font-semibold mb-1.5">الموعد النهائي</div>
               <div className="font-bold text-lg flex items-center gap-1">
                 <Calendar size={16} className="text-warning" />
-                {task.batch?.endDate}
+                {formatDate(task.batch?.endDate)}
               </div>
               <div className="text-sm text-warning mt-0.5">{Math.max(days, 0)} أيام متبقية</div>
             </div>
@@ -199,7 +198,7 @@ export function TaskDetailsPage() {
                 <div>
                   <div className="font-bold text-warning">لم تُسلِّم بعد</div>
                   <div className="text-sm text-ink-600 dark:text-ink-300">
-                    آخر موعد للتسليم: {task.batch?.endDate}
+                    آخر موعد للتسليم: {formatDate(task.batch?.endDate)}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
@@ -19,14 +19,16 @@ import { queryKeys } from '@/lib/queryClient'
 import { useDeleteSubmission } from '@/hooks/useSubmissions'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { formatRelative, cn } from '@/lib/utils'
+import { TeamBadge } from './TeamBadge'
 import type { Submission, SubmissionStatus } from '@/types'
 
 type StatusFilter = '' | SubmissionStatus
-type TypeFilter = '' | 'hw' | 'final' | 'hackathon'
+type TypeFilter = '' | 'hw' | 'hackathon'
 
 export function SubmissionsListPage() {
   const confirm = useConfirm()
   const deleteMutation = useDeleteSubmission()
+  const navigate = useNavigate()  // ✨ P0: استبدل window.location بـ navigate
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('')
   const [page, setPage] = useState(1)
@@ -34,7 +36,7 @@ export function SubmissionsListPage() {
   // ✨ Stage 7: PaginatedResponse + page parameter
   const { data: submissionsData, isLoading } = useQuery({
     queryKey: [...queryKeys.submissions, page],
-    queryFn: () => mockGetSubmissions(page),
+    queryFn: () => mockGetSubmissions({ page }),
   })
   const { data: stats } = useQuery({
     queryKey: queryKeys.stats,
@@ -58,8 +60,8 @@ export function SubmissionsListPage() {
 
   const filtered = submissions.filter((s) => {
     if (statusFilter && s.status !== statusFilter) return false
+    // ✨ P1-A: حذف 'final' — كل المهام HW فقط
     if (typeFilter === 'hw' && !(s.task && s.task.type === 'hw')) return false
-    if (typeFilter === 'final' && !(s.task && s.task.type === 'final')) return false
     if (typeFilter === 'hackathon' && !s.hackathonId) return false
     return true
   })
@@ -113,7 +115,6 @@ export function SubmissionsListPage() {
         >
           <option value="">كل الأنواع</option>
           <option value="hw">واجب (HW)</option>
-          <option value="final">مهمة نهائية (Final)</option>
           <option value="hackathon">هاكاثون</option>
         </select>
         <div className="mr-auto text-sm text-ink-400">{filtered.length} نتيجة</div>
@@ -199,9 +200,9 @@ function SubmissionRow({
   const StatusIcon = status.icon
 
   const isHackathon = !!submission.hackathonId
-  const isFinal = submission.task?.type === 'final'
+  // ✨ P1-A: حذف 'final' — كل المهام HW فقط
   const title = submission.task?.title ?? submission.hackathon?.title ?? 'تقديم'
-  const Icon = isHackathon ? Trophy : isFinal ? Trophy : CheckSquare
+  const Icon = isHackathon ? Trophy : CheckSquare
 
   return (
     <motion.tr
@@ -209,29 +210,45 @@ function SubmissionRow({
       animate={{ opacity: 1 }}
       transition={{ delay }}
       className="border-b border-ink-100 dark:border-ink-800 last:border-0 hover:bg-ink-50 dark:hover:bg-ink-800/50 cursor-pointer"
-      onClick={() => (window.location.href = `/submissions/${submission.id}`)}
+      onClick={() => window.location.assign(`/submissions/${submission.id}`)}
     >
       <td className="p-3">
         <div className="flex items-center gap-3">
           <div className={cn(
             'w-9 h-9 rounded-md grid place-items-center flex-shrink-0',
-            isHackathon || isFinal ? 'bg-warning-soft text-warning' : 'bg-info-soft text-info',
+            isHackathon ? 'bg-warning-soft text-warning' : 'bg-info-soft text-info',
           )}>
             <Icon size={16} />
           </div>
           <div className="min-w-0">
             <div className="font-semibold truncate">{title}</div>
-            <div className="text-xs text-ink-400">
+            <div className="text-xs text-ink-400 flex items-center gap-1 flex-wrap">
               {isHackathon ? 'هاكاثون' : submission.task ? `HW #${submission.task.id}` : ''}
               {submission.teamId ? ' · فِرقي' : ' · فردي'}
+              {/* ✨ TEAM EVALUATION: عرض مساهمة المستخدم في المشاريع الجماعية */}
+              {submission.isTeamSubmission && submission.myContribution != null && (
+                <span className="text-brand-500 font-medium">
+                  · مساهمتك: {submission.myContribution}%
+                </span>
+              )}
+              {submission.isTeamSubmission && submission.myRole && (
+                <span className="text-accent-500">
+                  · {submission.myRole === 'leader' ? 'قائد' : 'عضو'}
+                </span>
+              )}
             </div>
           </div>
         </div>
       </td>
       <td className="p-3">
-        <Badge variant={isHackathon ? 'warning' : isFinal ? 'warning' : 'info'}>
-          {isHackathon ? 'Hackathon' : isFinal ? 'Final' : 'HW'}
-        </Badge>
+        <div className="flex flex-col gap-1">
+          {/* ✨ P1-A: حذف 'final' — Hackathon أو HW فقط */}
+          <Badge variant={isHackathon ? 'warning' : 'info'}>
+            {isHackathon ? 'Hackathon' : 'HW'}
+          </Badge>
+          {/* ✨ TEAM EVALUATION: بادج "مشروع جماعي" */}
+          <TeamBadge submission={submission} />
+        </div>
       </td>
       <td className="p-3 text-sm text-ink-400">{formatRelative(submission.createdAt)}</td>
       <td className="p-3">

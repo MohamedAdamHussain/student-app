@@ -29,7 +29,7 @@ export function TasksListPage() {
   // ✨ Stage 7: استخدم PaginatedResponse + page parameter
   const { data: tasksData, isLoading } = useQuery({
     queryKey: [...queryKeys.tasks, page],
-    queryFn: () => mockGetTasks(page),
+    queryFn: () => mockGetTasks({ page }),
   })
 
   // ✨ Stage 7: استخرج data و meta
@@ -136,7 +136,7 @@ export function TasksListPage() {
 
 function TaskCard({ task }: { task: Task }) {
   const days = daysUntil(task.batch?.endDate ?? task.createdAt)
-  const isFinal = task.type === 'final'
+  // ✨ P1-A: تم حذف 'final' — كل المهام 'hw' فقط
   const statusMap: Record<SubmissionStatus | 'none', { variant: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
     none: { variant: 'neutral', label: 'لم تسلّم' },
     pending: { variant: 'warning', label: 'معلّق' },
@@ -154,10 +154,10 @@ function TaskCard({ task }: { task: Task }) {
         <div
           className={cn(
             'w-11 h-11 rounded-md grid place-items-center flex-shrink-0',
-            isFinal ? 'bg-warning-soft text-warning' : 'bg-info-soft text-info',
+            'bg-info-soft text-info',
           )}
         >
-          {isFinal ? <Trophy size={20} /> : <CheckSquare size={20} />}
+          <CheckSquare size={20} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -165,9 +165,8 @@ function TaskCard({ task }: { task: Task }) {
             <span className="font-semibold text-ink-900 dark:text-ink-100 text-sm">
               {task.title}
             </span>
-            <Badge variant={isFinal ? 'warning' : 'info'}>
-              {isFinal ? 'Final' : 'HW'}
-            </Badge>
+            {/* ✨ P1-A: حذف 'final' — كل المهام HW فقط */}
+            <Badge variant="info">HW</Badge>
             {task.videoRequired && (
               <Badge variant="info">يحتاج فيديو</Badge>
             )}
