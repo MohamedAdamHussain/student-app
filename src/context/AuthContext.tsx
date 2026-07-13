@@ -39,7 +39,20 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-const TOKEN_KEY = 'gradshow_token'
+const TOKEN_KEY = 'gradshow_student_token'
+// ✨ مفتاح معزول خاص بالطالب — يمنع تعارض الجلسات مع admin-app على نفس الـ origin (5173).
+const LEGACY_TOKEN_KEY = 'gradshow_token' // مُهاجَر من نسخ سابقة
+
+// ✨ Migration مرة واحدة: انقل الـ token القديم للمفتاح الجديد (تفادي تسجيل خروج المستخدمين الحاليين).
+function migrateTokenKey() {
+  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY)
+  if (legacy && !localStorage.getItem(TOKEN_KEY)) {
+    localStorage.setItem(TOKEN_KEY, legacy)
+  }
+  if (legacy) localStorage.removeItem(LEGACY_TOKEN_KEY)
+}
+migrateTokenKey()
+
 // ✨ P0-C: تم حذف USER_KEY كلياً — لا نُخزّن نسخة من الـ user
 
 export const AUTH_QUERY_KEY = ['auth'] as const

@@ -26,10 +26,16 @@ export function assetUrl(path?: string | null): string | null {
   return `${STORAGE_BASE}/storage/${path}`
 }
 
+// ✨ مفتاح الـ token مُعزَز خاص بالطالب — يمنع تعارض الجلسات مع admin-app
+// (كلاهما على نفس الـ origin/المنفذ 5173). يجب أن يطابق TOKEN_KEY في AuthContext.
+const STUDENT_TOKEN_KEY = 'gradshow_student_token'
+// مفتاح قديم مُهاجَر من نسخ سابقة (gradshow_token) — يُنقل للجديد مرة واحدة.
+const LEGACY_TOKEN_KEY = 'gradshow_token'
+
 // Request interceptor: attach Sanctum token
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('gradshow_token')
+    const token = localStorage.getItem(STUDENT_TOKEN_KEY)
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -63,7 +69,7 @@ api.interceptors.response.use(
     // ✨ 401 Unauthorized → أطلِق event بدل window.location.href
     // الـ AuthContext يستمع له ويوجّه عبر React Router (لا reload).
     if (status === 401) {
-      localStorage.removeItem('gradshow_token')
+      localStorage.removeItem(STUDENT_TOKEN_KEY)
       // ✨ P0-C: لا نحذف gradshow_user من هنا — AuthContext يتكفّل بتنظيف الـ state
       // (لو حذفناه هنا + استمعنا له في AuthContext، نتجنب race conditions)
       // نطلق event واحد فقط لكل 401 (لا نطلق لو كنا في /login لتجنب loop)
