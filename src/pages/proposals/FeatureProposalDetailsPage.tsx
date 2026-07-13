@@ -1,5 +1,5 @@
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Code, Globe, Video, ExternalLink, Pencil, Trash2,
@@ -15,11 +15,11 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Progress } from '@/components/ui/Progress'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/context/AuthContext'
-import { mockGetProposal, mockDeleteProposal } from '@/lib/mockData'
-import { queryKeys, proposalKeys } from '@/lib/queryClient'
+import { mockGetProposal } from '@/lib/mockData'
+import { proposalKeys } from '@/lib/queryClient'
+import { useDeleteProposal } from '@/hooks/useProposals'
 import { formatRelative, cn } from '@/lib/utils'
-import { toast } from 'sonner'
-import type { ProposalStatus } from '@/types'
+import { useConfirm } from '@/components/common/ConfirmDialog'
 
 const STATUS_CONFIG: Record<string, {
   variant: 'success' | 'warning' | 'danger' | 'info' | 'accent'
@@ -53,25 +53,16 @@ const STATUS_CONFIG: Record<string, {
 export function FeatureProposalDetailsPage() {
   const { id } = useParams<{ id: string }>()
   const proposalId = Number(id)
-  const navigate = useNavigate()
   const { user } = useAuth()
-  const queryClient = useQueryClient()
+  const confirm = useConfirm()
 
   const { data: proposal, isLoading } = useQuery<any>({
-    queryKey: ["proposals", proposalId],
+    queryKey: proposalKeys.detail(proposalId),
     queryFn: () => mockGetProposal(proposalId),
     enabled: !!proposalId,
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: () => mockDeleteProposal(proposalId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposals'] })
-      queryClient.invalidateQueries({ queryKey: proposalKeys.mine })
-      toast.success('تم حذف الاقتراح')
-      navigate(`/hackathons/${proposal?.hackathonId}`)
-    },
-  })
+  const deleteMutation = useDeleteProposal(proposalId)
 
   if (isLoading || !proposal) {
     return (
@@ -112,13 +103,22 @@ export function FeatureProposalDetailsPage() {
             <Link to={`/hackathons/${proposal.hackathonId}`}>
               <Button variant="ghost" size="sm"><ArrowLeft size={14} />رجوع</Button>
             </Link>
+            {/* ✨ FIX #3: زر التعديل الفعلي — كان canEdit يُحسب لكن الزر مفقود */}
+            {canEdit && (
+              <Link to={`/proposals/${proposalId}/edit`}>
+                <Button variant="secondary" size="sm">
+                  <Pencil size={14} />
+                  {proposal.status === 'needs_revision' ? 'تعديل وإعادة إرسال' : 'تعديل'}
+                </Button>
+              </Link>
+            )}
             {canDelete && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-danger hover:bg-danger-soft"
-                onClick={() => {
-                  if (confirm('هل أنت متأكد من حذف هذا الاقتراح؟')) deleteMutation.mutate()
+                onClick={async () => {
+                  if (await confirm({ message: 'هل أنت متأكد من حذف هذا الاقتراح؟' })) deleteMutation.mutate()
                 }}
               >
                 <Trash2 size={14} />حذف
@@ -252,7 +252,7 @@ export function FeatureProposalDetailsPage() {
           {proposal.adminFeedback && (
             <Card className={proposal.status === 'rejected' ? 'bg-danger-soft border-danger-border' : 'bg-success-soft border-success-border'}>
               <CardTitle className="mb-3 flex items-center gap-2">
-                <Avatar name={proposal.reviewedBy?.name ?? 'Admin'} size="sm" />
+                <Avatar name={proposal.reviewedByUser?.name ?? 'Admin'} size="sm" />
                 ملاحظات المسؤول
               </CardTitle>
               <div className="text-sm text-ink-600 dark:text-ink-300 leading-relaxed whitespace-pre-line">

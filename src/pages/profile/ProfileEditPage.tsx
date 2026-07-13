@@ -1,31 +1,48 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Upload, FileText, Trash2, Info, Save } from 'lucide-react'
+import { Upload, FileText, Trash2, Info, Save, Camera } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea, Select } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAuth } from '@/context/AuthContext'
-import { mockGetTracks, mockGetSubmissions, mockUpdateProfile } from '@/lib/mockData'
-import { queryKeys } from '@/lib/queryClient'
+import {
+  useProfile,
+  useTracks,
+  useMySubmissions,
+  useUpdateProfile,
+  useDeleteCv,
+  useUploadAvatar,
+  useDeleteAvatar,
+  type UpdateProfilePayload,
+} from '@/hooks/useProfileMutations'
+import { validateFile } from '@/lib/fileValidation'
+import { useConfirm } from '@/components/common/ConfirmDialog'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 export function ProfileEditPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const profile = user?.studentProfile
-  const queryClient = useQueryClient()
+  const confirm = useConfirm()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
-  const { data: tracks } = useQuery({ queryKey: queryKeys.tracks, queryFn: mockGetTracks })
-  const { data: submissions } = useQuery({ queryKey: queryKeys.submissions, queryFn: mockGetSubmissions })
+  // ✨ كل منطق الجلب/التعديل في hooks ممنوطة (انظر src/hooks/useProfileMutations)
+  const { data: profile } = useProfile()
+  const { data: tracks } = useTracks()
+  const { data: submissionsData } = useMySubmissions()
+  const submissions = submissionsData?.data ?? []
 
-  const acceptedSubmissions = (submissions ?? []).filter((s) => s.status === 'accepted')
+  const updateMutation = useUpdateProfile()
+  const deleteCvMutation = useDeleteCv()
+  const avatarMutation = useUploadAvatar()
+  const deleteAvatarMutation = useDeleteAvatar()
+
+  const acceptedSubmissions = submissions.filter((s) => s.status === 'accepted')
 
   const [form, setForm] = useState({
     bio: profile?.bio ?? '',
@@ -37,15 +54,26 @@ export function ProfileEditPage() {
     tracks: profile?.tracks?.map((t) => t.id) ?? [],
   })
 
-  const updateMutation = useMutation({
-    mutationFn: mockUpdateProfile,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.profile })
-      toast.success('تم حفظ التغييرات بنجاح ✓')
-      navigate('/profile')
-    },
-    onError: () => toast.error('حدث خطأ أثناء الحفظ'),
-  })
+  // ✨ state للـ CV file
+  const [cvFile, setCvFile] = useState<File | null>(null)
+  const [cvFileName, setCvFileName] = useState<string | null>(profile?.cvPath?.split('/').pop() ?? null)
+
+  // ✨ sync form مع profile quand il arrive (async fetch)
+  // useState initial يُحدّث مرة واحدة فقط عند mount، نحتاج useEffect للمزامنة
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        bio: profile.bio ?? '',
+        tagline: profile.tagline ?? '',
+        githubUrl: profile.githubUrl ?? '',
+        linkedinUrl: profile.linkedinUrl ?? '',
+        portfolioUrl: profile.portfolioUrl ?? '',
+        featuredProjectId: profile.featuredProjectId ?? '',
+        tracks: profile.tracks?.map((t) => t.id) ?? [],
+      })
+      setCvFileName(profile.cvPath?.split('/').pop() ?? null)
+    }
+  }, [profile])
 
   const set = (k: keyof typeof form, v: string | number | number[]) =>
     setForm((f) => ({ ...f, [k]: v }))
@@ -59,12 +87,64 @@ export function ProfileEditPage() {
     }))
   }
 
+  // ✨ handler لاختيار ملف CV
+  const handleCvChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // ✨ فحص موحّد للنوع (PDF فقط) والحجم (5MB)
+    if (!validateFile(file, { types: ['application/pdf'], maxSizeMB: 5, label: 'السيرة الذاتية' })) return
+    setCvFile(file)
+    setCvFileName(file.name)
+    toast.info('سيتم رفع السيرة الذاتية عند الحفظ')
+  }
+
+  const handleDeleteCv = async () => {
+    const ok = await confirm({
+      title: 'حذف السيرة الذاتية',
+      message: 'هل أنت متأكد من حذف السيرة الذاتية؟',
+      confirmText: 'حذف',
+      variant: 'danger',
+    })
+    if (!ok) return
+    deleteCvMutation.mutate()
+    setCvFile(null)
+    setCvFileName(null)
+  }
+
+  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // ✨ فحص موحّد للنوع والحجم
+    if (!validateFile(file, {
+      types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      maxSizeMB: 2,
+      label: 'الصورة الشخصية',
+    })) return
+    avatarMutation.mutate(file)
+  }
+
+  const handleDeleteAvatar = async () => {
+    const ok = await confirm({
+      title: 'حذف الصورة الشخصية',
+      message: 'هل أنت متأكد من حذف الصورة الشخصية؟',
+      confirmText: 'حذف',
+      variant: 'danger',
+    })
+    if (!ok) return
+    deleteAvatarMutation.mutate()
+  }
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    updateMutation.mutate({
+    // ✨ إرسال cv كـ File لو تم اختياره
+    const payload: UpdateProfilePayload = {
       ...form,
       featuredProjectId: form.featuredProjectId ? Number(form.featuredProjectId) : null,
-    } as any)
+    }
+    if (cvFile) {
+      payload.cv = cvFile
+    }
+    updateMutation.mutate(payload)
   }
 
   // Profile completion calculation
@@ -121,16 +201,54 @@ export function ProfileEditPage() {
         <Card className="mb-5">
           <CardTitle className="mb-4">الصورة الشخصية</CardTitle>
           <div className="flex items-center gap-4 flex-wrap">
-            <Avatar name={user?.name ?? 'User'} size="lg" />
+            {/* ✨ Stage 5: استخدم user.avatar الفعلي مع fallback للحرف الأول */}
+            <div className="relative">
+              <Avatar
+                name={user?.name ?? 'User'}
+                src={user?.avatar ?? undefined}
+                size="lg"
+              />
+              {avatarMutation.isPending && (
+                <div className="absolute inset-0 rounded-full bg-ink-900/50 grid place-items-center">
+                  <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
             <div>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleAvatarChange}
+                className="hidden"
+                id="avatar-input"
+              />
               <div className="flex gap-2 mb-2">
-                <Button type="button" variant="secondary" size="sm">
-                  <Upload size={14} />
-                  رفع صورة
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={avatarMutation.isPending}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  <Camera size={14} />
+                  {user?.avatar ? 'تغيير الصورة' : 'رفع صورة'}
                 </Button>
-                <Button type="button" variant="ghost" size="sm">حذف</Button>
+                {user?.avatar && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger"
+                    onClick={handleDeleteAvatar}
+                    disabled={deleteAvatarMutation.isPending}
+                  >
+                    <Trash2 size={14} />
+                    حذف
+                  </Button>
+                )}
               </div>
-              <div className="text-xs text-ink-400">JPG, PNG أو GIF · حد أقصى 2MB</div>
+              <div className="text-xs text-ink-400">JPG, PNG, WebP أو GIF · حد أقصى 2MB</div>
             </div>
           </div>
         </Card>
@@ -196,27 +314,55 @@ export function ProfileEditPage() {
         <Card className="mb-5">
           <CardTitle className="mb-4">السيرة الذاتية (CV)</CardTitle>
 
-          <div className="border-2 border-dashed border-ink-300 dark:border-ink-700 rounded-md p-6 text-center">
+          {/* ✨ P1-3: hidden input + label بدلاً من button غير فعّال */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            onChange={handleCvChange}
+            className="hidden"
+            id="cv-file-input"
+          />
+
+          <label
+            htmlFor="cv-file-input"
+            className="block border-2 border-dashed border-ink-300 dark:border-ink-700 rounded-md p-6 text-center cursor-pointer hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
+          >
             <div className="w-12 h-12 mx-auto mb-3 bg-ink-100 dark:bg-ink-800 rounded-full grid place-items-center text-ink-400">
               <Upload size={22} />
             </div>
             <div className="font-semibold mb-1">اسحب ملف CV هنا أو اضغط للاختيار</div>
             <div className="text-xs text-ink-400 mb-4">PDF فقط · حد أقصى 5MB</div>
-            <Button type="button" variant="secondary" size="sm">اختر ملف</Button>
-          </div>
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold bg-ink-100 dark:bg-ink-800 rounded-md">
+              <Upload size={14} />
+              اختر ملف
+            </span>
+          </label>
 
-          <div className="mt-4 flex items-center gap-3 p-3 bg-success-soft border border-success-border rounded-md">
-            <div className="w-9 h-9 bg-success rounded grid place-items-center text-white flex-shrink-0">
-              <FileText size={16} />
+          {/* ✨ P1-3: عرض اسم الملف الفعلي + زر حذف فعّال */}
+          {cvFileName && (
+            <div className="mt-4 flex items-center gap-3 p-3 bg-success-soft border border-success-border rounded-md">
+              <div className="w-9 h-9 bg-success rounded grid place-items-center text-white flex-shrink-0">
+                <FileText size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm truncate">{cvFileName}</div>
+                <div className="text-xs text-ink-400">
+                  {cvFile ? `جاهز للرفع · ${(cvFile.size / 1024).toFixed(0)}KB` : 'مرفوع سابقاً'}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-danger"
+                onClick={handleDeleteCv}
+                disabled={deleteCvMutation.isPending}
+              >
+                <Trash2 size={14} />
+              </Button>
             </div>
-            <div className="flex-1">
-              <div className="font-semibold text-sm">Ahmed_Ali_CV.pdf</div>
-              <div className="text-xs text-ink-400">تم الرفع · 280KB</div>
-            </div>
-            <Button type="button" variant="ghost" size="sm" className="text-danger">
-              <Trash2 size={14} />
-            </Button>
-          </div>
+          )}
         </Card>
 
         {/* Tracks */}
@@ -268,7 +414,8 @@ export function ProfileEditPage() {
             {acceptedSubmissions.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.task?.title ?? s.hackathon?.title}
-                {s.score ? ` (${(s.score / 10).toFixed(1)}/10)` : ''}
+                {/* ✨ P0-1: score أصلاً من 10 — لا قسمة */}
+                {s.score != null ? ` (${s.score.toFixed(1)}/10)` : ''}
               </option>
             ))}
           </Select>

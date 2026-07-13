@@ -8,23 +8,35 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Pagination } from '@/components/common/Pagination'
 import { mockGetTasks } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { daysUntil, cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import type { Task, SubmissionStatus } from '@/types'
 
-type FilterType = 'all' | 'hw' | 'final'
+// ✨ P1-5: إزالة 'final' — الـ backend لا يستخدمها للمهام
+// (الـ final = الهاكاثون نفسه)
+type FilterType = 'all' | 'hw'
 
 export function TasksListPage() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [statusFilter, setStatusFilter] = useState<string>('')
+  const [page, setPage] = useState(1)
+  // ✨ P1-1: جلب batch المستخدم الحالي ديناميكياً
+  const { user } = useAuth()
 
-  const { data: tasks, isLoading } = useQuery({
-    queryKey: queryKeys.tasks,
-    queryFn: mockGetTasks,
+  // ✨ Stage 7: استخدم PaginatedResponse + page parameter
+  const { data: tasksData, isLoading } = useQuery({
+    queryKey: [...queryKeys.tasks, page],
+    queryFn: () => mockGetTasks(page),
   })
 
-  const filtered = (tasks ?? []).filter((t) => {
+  // ✨ Stage 7: استخرج data و meta
+  const tasks = tasksData?.data ?? []
+  const meta = tasksData?.meta
+
+  const filtered = tasks.filter((t) => {
     if (filter !== 'all' && t.type !== filter) return false
     if (statusFilter === 'not_submitted' && t.mySubmissionStatus) return false
     if (statusFilter === 'pending' && t.mySubmissionStatus !== 'pending') return false
@@ -33,23 +45,25 @@ export function TasksListPage() {
   })
 
   const counts = {
-    all: tasks?.length ?? 0,
-    hw: tasks?.filter((t) => t.type === 'hw').length ?? 0,
-    final: tasks?.filter((t) => t.type === 'final').length ?? 0,
+    all: tasks.length,
+    hw: tasks.filter((t) => t.type === 'hw').length,
   }
+
+  // ✨ P1-1: subtitle ديناميكي يستخدم اسم الدفعة الفعلي
+  const batchName = user?.batch?.name ?? (user?.batchId ? `Batch ${user.batchId}` : 'دفعتك')
 
   return (
     <AppShell title="المهام">
       <PageHeader
         title="مهام دفعتك"
-        subtitle="كل مهام Batch 1 - 2026 · راجعها أسبوعياً وقدم تسليماتك قبل الـ Deadline"
+        subtitle={`كل مهام ${batchName} · راجعها أسبوعياً وقدم تسليماتك قبل الـ Deadline`}
         breadcrumbs={[{ label: 'الرئيسية', to: '/dashboard' }, { label: 'المهام' }]}
       />
 
       {/* Filter Bar */}
       <div className="flex items-center gap-3 flex-wrap mb-5">
         <div className="flex gap-1 p-1 bg-ink-100 dark:bg-ink-800 rounded-md">
-          {(['all', 'hw', 'final'] as FilterType[]).map((t) => (
+          {(['all', 'hw'] as FilterType[]).map((t) => (
             <button
               key={t}
               onClick={() => setFilter(t)}
@@ -60,7 +74,7 @@ export function TasksListPage() {
                   : 'text-ink-500 hover:text-ink-900 dark:hover:text-ink-100',
               )}
             >
-              {t === 'all' ? 'الكل' : t === 'hw' ? 'واجبات' : 'نهائية'}
+              {t === 'all' ? 'الكل' : 'واجبات'}
               <span className="mr-1.5 text-xs opacity-70">({counts[t]})</span>
             </button>
           ))}
@@ -107,12 +121,21 @@ export function TasksListPage() {
           ))}
         </div>
       )}
+
+      {/* ✨ Stage 7: Pagination controls */}
+      {meta && (
+        <Pagination
+          meta={meta}
+          onPageChange={(p) => setPage(p)}
+          loading={isLoading}
+        />
+      )}
     </AppShell>
   )
 }
 
 function TaskCard({ task }: { task: Task }) {
-  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
+  const days = daysUntil(task.batch?.endDate ?? task.createdAt)
   const isFinal = task.type === 'final'
   const statusMap: Record<SubmissionStatus | 'none', { variant: 'success' | 'warning' | 'danger' | 'neutral'; label: string }> = {
     none: { variant: 'neutral', label: 'لم تسلّم' },

@@ -20,6 +20,7 @@ const pageTitles: Record<string, string> = {
   '/submissions': 'تقديماتي',
   '/submissions/new': 'تقديم جديد',
   '/teams': 'فرقي',
+  '/settings': 'الإعدادات',
 }
 
 export function AppShell({ title, children }: AppShellProps) {
@@ -71,6 +72,10 @@ export function getPageTitle(pathname: string): string {
   if (pathname.match(/^\/tasks\/\d+$/)) return 'تفاصيل المهمة'
   if (pathname.match(/^\/hackathons\/\d+$/)) return 'تفاصيل الهاكاثون'
   if (pathname.match(/^\/submissions\/\d+$/)) return 'تفاصيل التقديم'
+  if (pathname.match(/^\/submissions\/\d+\/edit$/)) return 'تعديل التقديم'
   if (pathname.match(/^\/teams\/\d+$/)) return 'إدارة الفريق'
+  // ✨ FIX #3: عنوان صفحة تعديل المقترح
+  if (pathname.match(/^\/proposals\/\d+$/)) return 'تفاصيل الاقتراح'
+  if (pathname.match(/^\/proposals\/\d+\/edit$/)) return 'تعديل الاقتراح'
   return 'GradShow'
 }

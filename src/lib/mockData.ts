@@ -1,18 +1,21 @@
 import type { FeatureProposal, CreateProposalData,
-  AuditLog,
   Batch,
   DashboardStats,
   Hackathon,
+  JoinRequest,
   LoginCredentials,
+  PaginatedResponse,
   RegisterData,
   Skill,
   Submission,
   Task,
   Team,
+  TeamPreview,
   Track,
   User,
 } from '@/types'
 import { sleep } from './utils'
+import { api } from '@/lib/api'
 import * as apiServices from '@/services'
 
 // =====================================================
@@ -25,6 +28,16 @@ import * as apiServices from '@/services'
 // الصفحات لا تحتاج لتعديل — فقط غيّر VITE_USE_MOCK في .env
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+
+/**
+ * ✨ إنشاء خطأ بهيئة Axios كي يصلحه extractApiMessage (response.data.message).
+ * يُستخدم في دوال mock لرمي 422 بنفس شكل استجابة Laravel.
+ */
+function makeMockError(message: string, status = 422): Error {
+  const err = new Error(message) as Error & { response?: { status: number; data: { message: string } } }
+  err.response = { status, data: { message } }
+  return err
+}
 
 // =====================================================
 // Mock data — simulates the Laravel backend responses
@@ -56,21 +69,21 @@ export const mockBatches: Batch[] = [
     id: 1,
     name: 'Batch 1 - 2026',
     status: 'active',
-    start_date: '2026-01-01',
-    end_date: '2026-06-30',
-    users_count: 24,
-    tasks_count: 5,
-    hackathons_count: 2,
+    startDate: '2026-01-01',
+    endDate: '2026-06-30',
+    usersCount: 24,
+    tasksCount: 5,
+    hackathonsCount: 2,
   },
   {
     id: 2,
     name: 'Batch 2 - 2026',
     status: 'active',
-    start_date: '2026-04-01',
-    end_date: '2026-10-30',
-    users_count: 18,
-    tasks_count: 3,
-    hackathons_count: 1,
+    startDate: '2026-04-01',
+    endDate: '2026-10-30',
+    usersCount: 18,
+    tasksCount: 3,
+    hackathonsCount: 1,
   },
 ]
 
@@ -81,6 +94,13 @@ export const mockCurrentUser: User = {
   role: 'student',
   avatar: null,
   batchId: 1,
+  // ✨ B6: محاكاة بريد مُتحقَّق (لتجربة الـ banner "مُؤكَّد" في mock)
+  // غيّر لـ null لتجربة الـ banner "غير مُؤكَّد"
+  emailVerifiedAt: '2026-01-15T10:05:00Z',
+  // ✨ B4: الحساب نشط
+  isActive: true,
+  // ✨ P1-1: أضف batch كاملاً ليظهر في Sidebar/ProfilePage في وضع mock
+  batch: mockBatches[0],
   createdAt: '2026-01-15T10:00:00Z',
   studentProfile: {
     id: 1,
@@ -104,7 +124,7 @@ export const mockTasks: Task[] = [
     title: 'Final Project — Build a SaaS Dashboard',
     description:
       'في هذه المهمة النهائية، ستقوم ببناء لوحة تحكم SaaS متعددة المستخدمين. يجب أن يدعم النظام: تسجيل دخول متعدد الأدوار، عرض إحصائيات حية، إدارة المستخدمين (CRUD)، إعدادات الحساب الشخصي، تصدير البيانات (CSV, PDF)، وDark mode support.\n\nالمتطلبات التقنية:\n- Backend: Laravel 11+ مع REST API\n- Frontend: React/Next.js أو Vue/Nuxt\n- قاعدة بيانات: PostgreSQL\n- Tests: PHPUnit + Vitest\n- Documentation: Scribe أو OpenAPI\n\nفيديو العرض (إلزامي): سجل فيديو (5-10 دقائق) تشرح فيه المعمارية، التحديات، الحلول، وكيفية تشغيل المشروع محلياً.',
-    type: 'final',
+    type: 'hw',
     isTeam: false,
     maxTeamSize: null,
     videoRequired: true,
@@ -158,7 +178,7 @@ export const mockTasks: Task[] = [
     title: 'Final Project v1 — REST API Design',
     description:
       'تصميم REST API كامل لنظام مدونات. يشمل authentication, pagination, error handling, و rate limiting.',
-    type: 'final',
+    type: 'hw',
     isTeam: false,
     maxTeamSize: null,
     videoRequired: true,
@@ -270,7 +290,7 @@ export const mockSubmissions: Submission[] = [
     filePath: 'submissions/ecommerce-api-docs.pdf',
     videoUrl: 'https://youtube.com/watch?v=def456',
     status: 'accepted',
-    score: 90,
+    score: 9, // ✨ P0-2: من 10 (كان 90 من 100)
     isFeatured: true,
     isReopened: false,
     notes: 'ركّزت في هذا التسليم على البنية المعمارية النظيفة (Clean Architecture). أبرز ما أضفته: نظام Roles & Permissions، Custom Form Requests لكل endpoint، و API docs كاملة عبر Scribe.',
@@ -291,7 +311,7 @@ export const mockSubmissions: Submission[] = [
         oldStatus: 'pending',
         newStatus: 'accepted',
         oldScore: null,
-        newScore: 90,
+        newScore: 9,
         notes: 'عمل ممتاز! الكود نظيف جداً والـ API docs احترافية. ⭐',
         changedByUser: {
           id: 2,
@@ -331,7 +351,7 @@ export const mockSubmissions: Submission[] = [
     filePath: null,
     videoUrl: 'https://youtube.com/watch?v=ghi789',
     status: 'accepted',
-    score: 90,
+    score: 9, // ✨ P0-2: من 10 (كان 90)
     isFeatured: true,
     isReopened: false,
     notes: 'تصميم REST API كامل لنظام مدونات مع rate limiting.',
@@ -374,7 +394,7 @@ export const mockSubmissions: Submission[] = [
     filePath: null,
     videoUrl: 'https://youtube.com/watch?v=jkl012',
     status: 'accepted',
-    score: 85,
+    score: 8.5, // ✨ P0-2: من 10 (كان 85)
     isFeatured: false,
     isReopened: false,
     notes: 'منصة تعليمية بميزات بحث، تسجيل، ولوحة تحكم للمعلم.',
@@ -390,7 +410,7 @@ export const mockTeams: Team[] = [
   {
     id: 1,
     name: 'Code Wizards',
-    teamableType: 'Hackathon',
+    teamableType: 'hackathon',
     teamableId: 1,
     batchId: 1,
     teamMembers: [
@@ -438,7 +458,7 @@ export const mockTeams: Team[] = [
   {
     id: 2,
     name: 'Byte Busters',
-    teamableType: 'Hackathon',
+    teamableType: 'hackathon',
     teamableId: 2,
     batchId: 1,
     teamMembers: [
@@ -506,12 +526,12 @@ if (mockCurrentUser.studentProfile) {
 }
 
 export const mockDashboardStats: DashboardStats = {
-  total_submissions: 12,
+  totalSubmissions: 12,
   accepted: 8,
   pending: 3,
   rejected: 1,
-  average_score: 8.4,
-  rank_in_batch: 3,
+  averageScore: 8.4,
+  rankInBatch: 3,
 }
 
 // =====================================================
@@ -528,6 +548,18 @@ export async function mockLogin(email: string, _password: string) {
     user: mockCurrentUser,
     token: 'mock-sanctum-token-' + Date.now(),
   }
+}
+
+/**
+ * ✨ P1-4: محاكاة GET /auth/me للتحقق من صلاحية الـ token
+ * في وضع mock، يُرجع mockCurrentUser مباشرة (لا يوجد server للتحقق)
+ */
+export async function mockGetMe() {
+  if (!USE_MOCK) {
+    return apiServices.getMeApi()
+  }
+  await sleep(200)
+  return mockCurrentUser
 }
 
 export async function mockRegister(data: RegisterData) {
@@ -555,12 +587,27 @@ export async function mockGetDashboardStats() {
   return mockDashboardStats
 }
 
-export async function mockGetTasks() {
+// ✨ helper: wrap array in PaginatedResponse (mock mode)
+function paginateMock<T>(items: T[]): PaginatedResponse<T> {
+  return {
+    data: items,
+    meta: {
+      current_page: 1,
+      last_page: 1,
+      per_page: items.length,
+      total: items.length,
+      from: items.length > 0 ? 1 : null,
+      to: items.length > 0 ? items.length : null,
+    },
+  }
+}
+
+export async function mockGetTasks(page?: number): Promise<PaginatedResponse<Task>> {
   if (!USE_MOCK) {
-    return apiServices.getTasksApi()
+    return apiServices.getTasksApi(page ? { page } : undefined)
   }
   await sleep(400)
-  return mockTasks
+  return paginateMock(mockTasks)
 }
 
 export async function mockGetTask(id: number) {
@@ -573,12 +620,12 @@ export async function mockGetTask(id: number) {
   return task
 }
 
-export async function mockGetHackathons() {
+export async function mockGetHackathons(page?: number): Promise<PaginatedResponse<Hackathon>> {
   if (!USE_MOCK) {
-    return apiServices.getHackathonsApi()
+    return apiServices.getHackathonsApi(page ? { page } : undefined)
   }
   await sleep(400)
-  return mockHackathons
+  return paginateMock(mockHackathons)
 }
 
 export async function mockGetHackathon(id: number) {
@@ -591,12 +638,12 @@ export async function mockGetHackathon(id: number) {
   return hackathon
 }
 
-export async function mockGetSubmissions() {
+export async function mockGetSubmissions(page?: number): Promise<PaginatedResponse<Submission>> {
   if (!USE_MOCK) {
-    return apiServices.getSubmissionsApi()
+    return apiServices.getSubmissionsApi(page ? { page } : undefined)
   }
   await sleep(400)
-  return mockSubmissions
+  return paginateMock(mockSubmissions)
 }
 
 export async function mockGetSubmission(id: number) {
@@ -609,7 +656,7 @@ export async function mockGetSubmission(id: number) {
   return sub
 }
 
-export async function mockCreateSubmission(data: Partial<Submission>) {
+export async function mockCreateSubmission(data: Partial<Submission> & { file?: File }) {
   if (!USE_MOCK) {
     return apiServices.createSubmissionApi(data)
   }
@@ -622,7 +669,8 @@ export async function mockCreateSubmission(data: Partial<Submission>) {
     teamId: data.teamId ?? null,
     githubUrl: data.githubUrl ?? null,
     liveUrl: data.liveUrl ?? null,
-    filePath: data.filePath ?? null,
+    // ✨ خزّن اسم الملف المرفوع كـ path وهمي (mock) — الـ fileUrl يُشتق منه
+    filePath: data.file ? `submissions/mock-${Date.now()}-${data.file.name}` : null,
     videoUrl: data.videoUrl ?? null,
     status: 'pending',
     score: null,
@@ -642,9 +690,14 @@ export async function mockCreateSubmission(data: Partial<Submission>) {
 // ✨ P0-2: تعديل التقديم (فقط لو pending)
 export async function mockUpdateSubmission(id: number, data: Partial<Submission>) {
   if (!USE_MOCK) {
-    const { api } = await import('@/lib/api')
-    const { data: result } = await api.put(`/submissions/${id}`, data)
-    return result
+    // ✨ P0 FIX: استخدم updateSubmissionApi (transformSubmission + snake_case + FormData)
+    // بدل api.put المباشر الذي كان يُرجع snake_case خام فيُكسر الـ UI.
+    return apiServices.updateSubmissionApi(id, {
+      github_url: (data as Record<string, unknown>).github_url as string | null | undefined,
+      live_url: (data as Record<string, unknown>).live_url as string | null | undefined,
+      video_url: (data as Record<string, unknown>).video_url as string | null | undefined,
+      notes: (data as Record<string, unknown>).notes as string | null | undefined,
+    })
   }
   await sleep(700)
   const sub = mockSubmissions.find((s) => s.id === id)
@@ -652,8 +705,34 @@ export async function mockUpdateSubmission(id: number, data: Partial<Submission>
   if (sub.status !== 'pending') {
     throw new Error('لا يمكن تعديل تسليم تمت مراجعته')
   }
-  Object.assign(sub, data)
+  // ✨ B2-mock: طابّق مفاتيح snake_case (من صفحة التعديل) إلى camelCase لنموذج Submission
+  if ((data as Record<string, unknown>).github_url !== undefined) {
+    sub.githubUrl = (data as Record<string, unknown>).github_url as string | null
+  }
+  if ((data as Record<string, unknown>).live_url !== undefined) {
+    sub.liveUrl = (data as Record<string, unknown>).live_url as string | null
+  }
+  if ((data as Record<string, unknown>).video_url !== undefined) {
+    sub.videoUrl = (data as Record<string, unknown>).video_url as string | null
+  }
+  if ((data as Record<string, unknown>).notes !== undefined) {
+    sub.notes = (data as Record<string, unknown>).notes as string | null
+  }
   return sub
+}
+
+/**
+ * ✨ B3: واجهة facade لحذف التقديم — كانت مفقودة فكان الحذف معطّلاً تماماً.
+ */
+export async function mockDeleteSubmission(id: number): Promise<void> {
+  if (!USE_MOCK) {
+    return apiServices.deleteSubmissionApi(id)
+  }
+  await sleep(500)
+  const idx = mockSubmissions.findIndex((s) => s.id === id)
+  if (idx >= 0) {
+    mockSubmissions.splice(idx, 1)
+  }
 }
 
 export async function mockGetTeams() {
@@ -676,7 +755,7 @@ export async function mockGetTeam(id: number) {
 
 export async function mockCreateTeam(data: { name: string; teamableId: number; teamableType: string }) {
   if (!USE_MOCK) {
-    // Laravel expects 'task' or 'hackathon' (lowercase)
+    // ✨ Laravel expects 'task' or 'hackathon' (lowercase)
     const teamableType = data.teamableType.toLowerCase() === 'hackathon' ? 'hackathon' : 'task'
     return apiServices.createTeamApi({
       name: data.name,
@@ -685,10 +764,12 @@ export async function mockCreateTeam(data: { name: string; teamableId: number; t
     })
   }
   await sleep(700)
+  // ✨ mock data يستخدم lowercase للاتساق مع transformTeam
+  const normalizedType = data.teamableType.toLowerCase() === 'hackathon' ? 'hackathon' : 'task'
   const newTeam: Team = {
     id: mockTeams.length + 1,
     name: data.name,
-    teamableType: data.teamableType,
+    teamableType: normalizedType,
     teamableId: data.teamableId,
     batchId: 1,
     teamMembers: [
@@ -700,7 +781,7 @@ export async function mockCreateTeam(data: { name: string; teamableId: number; t
         user: mockCurrentUser,
       },
     ],
-    teamable: data.teamableType === 'Hackathon'
+    teamable: normalizedType === 'hackathon'
       ? mockHackathons.find((h) => h.id === data.teamableId)
       : mockTasks.find((t) => t.id === data.teamableId),
     createdAt: new Date().toISOString(),
@@ -709,15 +790,66 @@ export async function mockCreateTeam(data: { name: string; teamableId: number; t
   return newTeam
 }
 
-export async function mockUpdateProfile(data: Partial<NonNullable<User['studentProfile']>>) {
+export async function mockUpdateProfile(
+  data: Omit<Partial<NonNullable<User['studentProfile']>>, 'tracks'> & { cv?: File; tracks?: number[] },
+) {
   if (!USE_MOCK) {
-    return apiServices.updateProfileApi(data as any)
+    return apiServices.updateProfileApi(data)
   }
   await sleep(700)
   if (mockCurrentUser.studentProfile) {
-    Object.assign(mockCurrentUser.studentProfile, data)
+    // ✨ P1-3: لا تخزّن File object في الـ mock — استخدم اسم الملف فقط
+    const { cv, tracks, ...rest } = data
+    Object.assign(mockCurrentUser.studentProfile, rest)
+    if (cv) {
+      mockCurrentUser.studentProfile.cvPath = `cvs/${cv.name}`
+    }
+    // ✨ tracks هنا number[] — لا نحدث الـ studentProfile.tracks (التي Track[]) في mock
+    // الـ backend فقط يربط الـ IDs بالـ tracks الفعلية
   }
   return mockCurrentUser.studentProfile
+}
+
+/**
+ * ✨ P1-3: حذف الـ CV
+ */
+export async function mockDeleteCv() {
+  if (!USE_MOCK) {
+    return apiServices.deleteCvApi()
+  }
+  await sleep(500)
+  if (mockCurrentUser.studentProfile) {
+    mockCurrentUser.studentProfile.cvPath = null
+  }
+}
+
+/**
+ * ✨ Stage 5: رفع الصورة الشخصية
+ */
+export async function mockUploadAvatar(file: File) {
+  if (!USE_MOCK) {
+    return apiServices.uploadAvatarApi(file)
+  }
+  await sleep(800)
+  // ✨ في وضع mock، نُنشئ object URL مؤقت للمعاينة
+  const avatarUrl = URL.createObjectURL(file)
+  mockCurrentUser.avatar = avatarUrl
+  return {
+    avatar: avatarUrl,
+    user: { ...mockCurrentUser },
+  }
+}
+
+/**
+ * ✨ Stage 5: حذف الصورة الشخصية
+ */
+export async function mockDeleteAvatar() {
+  if (!USE_MOCK) {
+    return apiServices.deleteAvatarApi()
+  }
+  await sleep(400)
+  mockCurrentUser.avatar = null
+  return { user: { ...mockCurrentUser } }
 }
 
 // ✨ جلب الـ profile من API مباشرة (يستخدمه ProfilePage)
@@ -726,7 +858,19 @@ export async function mockGetProfile() {
     return apiServices.getProfileApi()
   }
   await sleep(400)
-  return mockCurrentUser.studentProfile
+  // ✨ BUG FIX #9: featuredProject كان دائماً null في mock — اربطه بـ mockSubmissions
+  // محاكاة لـ StudentProfileController@show الذي يبحث عن أعلى submission مقبول
+  const profile = mockCurrentUser.studentProfile
+  if (profile && !profile.featuredProject) {
+    const bestSubmission = mockSubmissions
+      .filter((s) => s.status === 'accepted' && s.score !== null)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+    if (bestSubmission) {
+      profile.featuredProject = bestSubmission
+      profile.featuredProjectId = bestSubmission.id
+    }
+  }
+  return profile
 }
 
 export async function mockGetSkills() {
@@ -902,4 +1046,297 @@ export async function mockDeleteProposal(id: number) {
   await sleep(500)
   const idx = mockProposals.findIndex((p) => p.id === id)
   if (idx >= 0) mockProposals.splice(idx, 1)
+}
+
+/**
+ * ✨ FIX #3: تعديل اقتراح (mock + real API) — كان مفقوداً تماماً.
+ * يستخدم في صفحة FeatureProposalEditPage الجديدة.
+ */
+export async function mockUpdateProposal(id: number, data: Partial<CreateProposalData>) {
+  if (!USE_MOCK) {
+    return apiServices.updateProposalApi(id, data)
+  }
+  await sleep(700)
+  const proposal = mockProposals.find((p) => p.id === id)
+  if (!proposal) throw new Error('Proposal not found')
+  if (proposal.status !== 'pending' && proposal.status !== 'needs_revision') {
+    throw new Error('لا يمكن تعديل proposal تمت مراجعته وقبوله')
+  }
+  if (data.title !== undefined) proposal.title = data.title
+  if (data.problem_statement !== undefined) proposal.problemStatement = data.problem_statement
+  if (data.proposed_solution !== undefined) proposal.proposedSolution = data.proposed_solution
+  if (data.added_value !== undefined) proposal.addedValue = data.added_value
+  if (data.github_url !== undefined) proposal.githubUrl = data.github_url ?? null
+  if (data.live_url !== undefined) proposal.liveUrl = data.live_url ?? null
+  if (data.video_url !== undefined) proposal.videoUrl = data.video_url ?? null
+  if (data.implementation_notes !== undefined) proposal.implementationNotes = data.implementation_notes ?? null
+  // ✨ لو كان needs_revision، نُعيده لـ pending بعد التعديل
+  if (proposal.status === 'needs_revision') {
+    proposal.status = 'pending'
+  }
+  proposal.updatedAt = new Date().toISOString()
+  return proposal
+}
+
+// ✨ إزالة عضو من فريق
+export async function mockRemoveTeamMember(teamId: number, userId: number) {
+  if (!USE_MOCK) {
+    return apiServices.removeTeamMemberApi(teamId, userId)
+  }
+  await sleep(500)
+  const team = mockTeams.find((t) => t.id === teamId)
+  if (!team) throw new Error('Team not found')
+  team.teamMembers = team.teamMembers.filter((m) => m.userId !== userId)
+  return team
+}
+
+// =====================================================
+// ✨ Join Requests — طلبات الانضمام للفرق (موافقة القائد)
+// =====================================================
+// mockJoinRequests يُخزَّن في الذاكرة؛ الإقران عبر (teamId, userId) فريد.
+const mockJoinRequests: JoinRequest[] = []
+
+export async function mockPreviewTeam(teamId: number): Promise<TeamPreview> {
+  if (!USE_MOCK) {
+    return apiServices.previewTeamApi(teamId)
+  }
+  await sleep(300)
+  const team = mockTeams.find((t) => t.id === teamId)
+  if (!team) throw new Error('Team not found')
+  return computePreview(team)
+}
+
+/**
+ * ✨ فرق متاحة لـ teamable (لاكتشاف الانضمام) — معاينة محدودة لكل فريق.
+ */
+export async function mockGetTeamsForTeamable(
+  teamableType: 'task' | 'hackathon',
+  teamableId: number,
+): Promise<import('@/services').TeamSummary[]> {
+  if (!USE_MOCK) {
+    return apiServices.getTeamsForTeamableApi(teamableType, teamableId)
+  }
+  await sleep(300)
+  return mockTeams
+    .filter((t) => t.teamableType === teamableType && t.teamableId === teamableId)
+    .map((t) => {
+      const p = computePreview(t)
+      return {
+        id: p.id,
+        name: p.name,
+        membersCount: p.membersCount,
+        maxTeamSize: p.maxTeamSize,
+        leaderName: p.leaderName,
+        canRequestJoin: p.canRequestJoin,
+      }
+    })
+}
+
+// ✨ منطق مشترك لحساب معاينة فريق (preview) من بيانات mock.
+function computePreview(team: Team): TeamPreview {
+  const teamable = team.teamable
+  const maxTeamSize = (teamable && 'maxTeamSize' in teamable ? teamable.maxTeamSize : null) ?? null
+  const membersCount = team.teamMembers.length
+  const leader = team.teamMembers.find((m) => m.isLeader)
+  const isMember = team.teamMembers.some((m) => m.userId === mockCurrentUser.id)
+  const hasPending = mockJoinRequests.some(
+    (r) => r.teamId === team.id && r.userId === mockCurrentUser.id && r.status === 'pending',
+  )
+  const slotAvailable = !maxTeamSize || membersCount < maxTeamSize
+  const canRequestJoin =
+    mockCurrentUser.role === 'student' &&
+    !isMember &&
+    !hasPending &&
+    slotAvailable &&
+    mockCurrentUser.batchId === team.batchId
+  return {
+    id: team.id,
+    name: team.name,
+    teamableType: team.teamableType,
+    teamableId: team.teamableId,
+    teamableTitle: teamable?.title ?? '—',
+    membersCount,
+    maxTeamSize,
+    leaderName: leader?.user.name ?? null,
+    canRequestJoin,
+  }
+}
+
+export async function mockCreateJoinRequest(teamId: number, message?: string | null): Promise<JoinRequest> {
+  if (!USE_MOCK) {
+    return apiServices.createJoinRequestApi(teamId, message)
+  }
+  await sleep(600)
+  const team = mockTeams.find((t) => t.id === teamId)
+  if (!team) throw new Error('Team not found')
+
+  const isMember = team.teamMembers.some((m) => m.userId === mockCurrentUser.id)
+  if (isMember) throw makeMockError('أنت بالفعل عضو في هذا الفريق', 422)
+  const existing = mockJoinRequests.find((r) => r.teamId === teamId && r.userId === mockCurrentUser.id)
+  if (existing) throw makeMockError('لقد أرسلت طلباً مسبقاً لهذا الفريق', 422)
+
+  const req: JoinRequest = {
+    id: mockJoinRequests.length + 1,
+    teamId,
+    userId: mockCurrentUser.id,
+    status: 'pending',
+    message: message ?? null,
+    createdAt: new Date().toISOString(),
+    team,
+    user: mockCurrentUser,
+  }
+  mockJoinRequests.push(req)
+  return req
+}
+
+export async function mockGetMyJoinRequests(): Promise<JoinRequest[]> {
+  if (!USE_MOCK) {
+    return apiServices.getMyJoinRequestsApi()
+  }
+  await sleep(300)
+  return mockJoinRequests
+    .filter((r) => r.userId === mockCurrentUser.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export async function mockGetTeamJoinRequests(teamId: number): Promise<JoinRequest[]> {
+  if (!USE_MOCK) {
+    return apiServices.getTeamJoinRequestsApi(teamId)
+  }
+  await sleep(300)
+  return mockJoinRequests
+    .filter((r) => r.teamId === teamId && r.status === 'pending')
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+export async function mockApproveJoinRequest(teamId: number, joinRequestId: number): Promise<JoinRequest> {
+  if (!USE_MOCK) {
+    return apiServices.approveJoinRequestApi(teamId, joinRequestId)
+  }
+  await sleep(500)
+  const team = mockTeams.find((t) => t.id === teamId)
+  if (!team) throw new Error('Team not found')
+  const req = mockJoinRequests.find((r) => r.id === joinRequestId && r.teamId === teamId)
+  if (!req || req.status !== 'pending') throw makeMockError('الطلب لم يعد قيد المراجعة', 422)
+  if (!req.user) throw makeMockError('الطلب لم يعد متاحاً', 422)
+  // أضِف العضو للفريق
+  team.teamMembers.push({
+    id: Date.now(),
+    teamId,
+    userId: req.userId,
+    isLeader: false,
+    user: req.user,
+  })
+  req.status = 'approved'
+  return req
+}
+
+export async function mockRejectJoinRequest(teamId: number, joinRequestId: number): Promise<JoinRequest> {
+  if (!USE_MOCK) {
+    return apiServices.rejectJoinRequestApi(teamId, joinRequestId)
+  }
+  await sleep(400)
+  const req = mockJoinRequests.find((r) => r.id === joinRequestId && r.teamId === teamId)
+  if (!req || req.status !== 'pending') throw makeMockError('الطلب لم يعد قيد المراجعة', 422)
+  req.status = 'rejected'
+  return req
+}
+
+// =====================================================
+// ✨ P1-5: Auth helpers — توحيد Facade لصفحات forgot/reset password
+// =====================================================
+
+/**
+ * إعادة تعيين كلمة المرور — يعمل في الحالتين (mock + real API)
+ */
+export async function mockForgotPassword(email: string): Promise<{ message: string }> {
+  if (!USE_MOCK) {
+    const { data } = await api.post('/auth/forgot-password', { email })
+    return data
+  }
+  await sleep(500)
+  // ✨ نفس رسالة الـ backend لمنع enumeration
+  return {
+    message: 'إذا كان البريد الإلكتروني مسجّلاً لدينا، ستستقبل رسالة لإعادة تعيين كلمة المرور خلال دقائق.',
+  }
+}
+
+/**
+ * تعيين كلمة مرور جديدة — يعمل في الحالتين (mock + real API)
+ */
+export async function mockResetPassword(payload: {
+  token: string
+  email: string
+  password: string
+  password_confirmation: string
+}): Promise<{ message: string }> {
+  if (!USE_MOCK) {
+    const { data } = await api.post('/auth/reset-password', payload)
+    return data
+  }
+  await sleep(500)
+  if (!payload.token || !payload.email || !payload.password) {
+    throw new Error('بيانات غير صالحة')
+  }
+  return { message: 'تم تغيير كلمة المرور بنجاح. سجّل الدخول بكلمة المرور الجديدة.' }
+}
+
+/**
+ * تغيير كلمة المرور (من صفحة Settings) — يعمل في الحالتين
+ */
+export async function mockChangePassword(payload: {
+  current_password: string
+  password: string
+  password_confirmation: string
+}): Promise<{ message: string }> {
+  if (!USE_MOCK) {
+    const { data } = await api.put('/auth/password', payload)
+    return data
+  }
+  await sleep(500)
+  return { message: 'تم تغيير كلمة المرور بنجاح' }
+}
+
+// =====================================================
+// ✨ B6: Email Verification helpers — Facade لصفحة VerifyEmailPage
+// =====================================================
+
+/**
+ * تأكيد البريد الإلكتروني — يعمل في الحالتين (mock + real API).
+ *
+ * endpoint عام (لا يتطلب auth). يُستدعى:
+ * - تلقائياً عند القدوم من رابط الإيميل (?token=xxx&email=yyy)
+ * - يدوياً من نموذج VerifyEmailPage
+ */
+export async function mockVerifyEmail(payload: {
+  token: string
+  email: string
+}): Promise<{ message: string }> {
+  if (!USE_MOCK) {
+    const { data } = await api.post('/auth/verify-email', payload)
+    return data
+  }
+  await sleep(700)
+  // ✨ محاكاة واقعية: الرمز غير الفارغ يُعتبَر صالحاً في mock
+  if (!payload.token || !payload.email) {
+    throw makeMockError('رمز غير صالح أو البريد مُتحقَّق بالفعل', 422)
+  }
+  // ✨ محاكاة تحديث حالة المستخدم في mock
+  if (mockCurrentUser.email === payload.email) {
+    mockCurrentUser.emailVerifiedAt = new Date().toISOString()
+  }
+  return { message: 'تم تأكيد بريدك الإلكتروني بنجاح' }
+}
+
+/**
+ * إعادة إرسال رمز التحقق — يعمل في الحالتين.
+ * يتطلب auth (Bearer token) — يستدعيه المستخدم المسجّل دخول فقط.
+ */
+export async function mockResendVerification(): Promise<{ message: string }> {
+  if (!USE_MOCK) {
+    const { data } = await api.post('/auth/resend-verification')
+    return data
+  }
+  await sleep(600)
+  return { message: 'تمت إعادة إرسال رمز التحقق إلى بريدك.' }
 }

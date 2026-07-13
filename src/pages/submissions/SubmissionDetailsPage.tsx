@@ -16,6 +16,22 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { mockGetSubmission } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { formatRelative, cn } from '@/lib/utils'
+import { assetUrl } from '@/lib/api'
+import type { AuditLog, User } from '@/types'
+
+/**
+ * ✨ F5: استخراج اسم المراجِع من سجل التدقيق بأمان.
+ * الـ backend يُرجع changed_by (رقم id) + changed_by_user (UserResource).
+ * نُفضّل changedByUser، وإن لم يوجد نتحقق أن changedBy كائن User (بيانات قديمة/mock).
+ */
+function reviewerName(log?: AuditLog): string | undefined {
+  if (!log) return undefined
+  const fromUser = log.changedByUser
+  if (fromUser) return fromUser.name
+  const changedBy = log.changedBy
+  if (typeof changedBy === 'object' && changedBy !== null) return (changedBy as User).name
+  return undefined
+}
 
 export function SubmissionDetailsPage() {
   const { id } = useParams<{ id: string }>()
@@ -102,7 +118,8 @@ export function SubmissionDetailsPage() {
               >
                 <div className="text-xs text-ink-500 uppercase">الدرجة النهائية</div>
                 <div className="text-success text-3xl font-extrabold leading-none">
-                  {(submission.score / 10).toFixed(1)}
+                  {/* ✨ P0-1: score أصلاً من 10 — لا قسمة */}
+                  {submission.score!.toFixed(1)}
                   <span className="text-base opacity-70">/10</span>
                 </div>
               </motion.div>
@@ -122,7 +139,10 @@ export function SubmissionDetailsPage() {
             </div>
             <div>
               <div className="text-xs text-ink-400 mb-1 uppercase">راجعه</div>
-              <div className="font-semibold">90Soft Admin</div>
+              {/* ✨ P1-7: استخدم اسم الـ reviewer من audit logs (كان hardcoded "90Soft Admin") */}
+              <div className="font-semibold">
+                {reviewerName(submission.auditLogs?.find((log) => log.action === 'reviewed' || log.action === 'score_updated')) ?? '—'}
+              </div>
             </div>
             <div>
               <div className="text-xs text-ink-400 mb-1 uppercase">تاريخ المراجعة</div>
@@ -178,7 +198,8 @@ export function SubmissionDetailsPage() {
                 <SubmissionLink
                   icon={<FileText size={18} />}
                   label="API Documentation (PDF)"
-                  url="#"
+                  // ✨ FIX #1: استخدم assetUrl لتحويل رابط الملف النسبي لمطلق
+                  url={assetUrl(submission.fileUrl ?? submission.filePath) ?? '#'}
                   color="bg-danger-soft text-danger"
                   actionLabel="تحميل"
                 />
@@ -277,14 +298,15 @@ export function SubmissionDetailsPage() {
                             {log.action === 'submitted' && 'تم تسليم المشروع'}
                           </span>
                           {log.newScore && (
-                            <Badge variant="success">الدرجة: {(log.newScore / 10).toFixed(1)}/10</Badge>
+                            <Badge variant="success">الدرجة: {log.newScore.toFixed(1)}/10</Badge>
                           )}
                           {log.action === 'reviewed' && submission.isFeatured && isFirst && (
                             <Badge variant="accent">مميّز ⭐</Badge>
                           )}
                         </div>
                         <div className="text-xs text-ink-400">
-                          بواسطة {log.changedByUser.name} · {formatRelative(log.createdAt)}
+                          {/* ✨ F5: changedBy قد يكون رقماً (id) من الـ API — استخدم changedByUser للاسم */}
+                          بواسطة {reviewerName(log) ?? '—'} · {formatRelative(log.createdAt)}
                         </div>
                       </div>
                     </div>

@@ -6,6 +6,7 @@ import { Logo } from '@/components/ui/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/context/AuthContext'
+import { extractApiMessage } from '@/lib/errors'
 import { toast } from 'sonner'
 
 export function RegisterPage() {
@@ -39,13 +40,17 @@ export function RegisterPage() {
         name: form.name,
         email: form.email,
         password: form.password,
+        passwordConfirmation: form.passwordConfirmation,
         role: 'student',
         // batch_id لم يعد مطلوباً — Laravel يخصصه تلقائياً
       })
-      toast.success('تم إنشاء حسابك بنجاح! 🎉')
-      navigate('/dashboard')
-    } catch (err: any) {
-      toast.error(err?.message ?? 'حدث خطأ. حاول مرة أخرى.')
+      // ✨ B6: التسجيل يُرسل إيميل تحقق تلقائياً. نوجّه الطالب لصفحة
+      // VerifyEmailPage حيث يمكنه إدخال الرمز يدوياً أو إعادة الإرسال.
+      // (لو ضغط على رابط الإيميل، سيذهب لنفس الصفحة بـ token في الـ URL.)
+      toast.success('تم إنشاء حسابك! تحقق من بريدك لتأكيد الحساب 📧')
+      navigate('/verify-email')
+    } catch (err: unknown) {
+      toast.error(extractApiMessage(err, 'حدث خطأ. حاول مرة أخرى.'))
     } finally {
       setLoading(false)
     }

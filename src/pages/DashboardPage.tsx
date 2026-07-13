@@ -10,45 +10,134 @@ import {
   Trophy,
   CheckSquare,
   Users,
-  User as UserIcon,
   Pencil,
   ArrowLeft,
   Calendar,
+  AlertCircle,
+  Mail,
+  MailCheck,
+  X,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { StatCard } from '@/components/common/StatCard'
+import { ApiDebug } from '@/components/common/ApiDebug'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { useAuth } from '@/context/AuthContext'
 import { mockGetDashboardStats, mockGetTasks, mockGetSubmissions } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { daysUntil, formatRelative } from '@/lib/utils'
 import type { Task, Submission, SubmissionStatus } from '@/types'
+import { useState, useEffect } from 'react'
 
 export function DashboardPage() {
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  // ✨ جلب بيانات المستخدم الحقيقي من AuthContext
+  const { user } = useAuth()
+
+  // ✨ B6: حالة إخفاء banner التحقق بالبريد (يُحفظ في localStorage حتى لا يزعج المستخدم)
+  const [emailBannerDismissed, setEmailBannerDismissed] = useState(false)
+  const isEmailVerified = !!user?.emailVerifiedAt
+  const showEmailBanner = !isEmailVerified && !emailBannerDismissed
+
+  // ✨ إعادة ضبط الإخفاء لو تغيّر المستخدم (للطالب جديد)
+  useEffect(() => {
+    setEmailBannerDismissed(false)
+  }, [user?.id])
+
+  const dismissEmailBanner = () => {
+    setEmailBannerDismissed(true)
+    // ✨ نحفظ القرار لمدة 7 أيام (بعد ذلك نُذكّر مرة أخرى)
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000
+    localStorage.setItem('gradshow_email_banner_dismissed_until', String(Date.now() + sevenDaysMs))
+  }
+
+  // ✨ استعادة حالة الإخفاء من localStorage عند mount
+  useEffect(() => {
+    const dismissedUntil = localStorage.getItem('gradshow_email_banner_dismissed_until')
+    if (dismissedUntil) {
+      const until = Number(dismissedUntil)
+      if (Date.now() < until) {
+        setEmailBannerDismissed(true)
+      } else {
+        // انتهت صلاحية الإخفاء → احذفه
+        localStorage.removeItem('gradshow_email_banner_dismissed_until')
+      }
+    }
+  }, [])
+
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: queryKeys.stats,
     queryFn: mockGetDashboardStats,
   })
-  const { data: tasks } = useQuery({
+  const { data: tasksData } = useQuery({
     queryKey: queryKeys.tasks,
-    queryFn: mockGetTasks,
+    queryFn: () => mockGetTasks(),
   })
-  const { data: submissions } = useQuery({
+  const { data: submissionsData } = useQuery({
     queryKey: queryKeys.submissions,
-    queryFn: mockGetSubmissions,
+    queryFn: () => mockGetSubmissions(),
   })
 
-  const upcomingTasks = (tasks ?? [])
-    .filter((t) => t.mySubmissionStatus === null || t.mySubmissionStatus === 'pending')
+  // ✨ Stage 7: استخرج data من PaginatedResponse
+  const tasks = tasksData?.data ?? []
+  const submissions = submissionsData?.data ?? []
+
+  // ✨ فلترة مرنة: المهام غير المُسلّمة أو معلّقة
+  const upcomingTasks = tasks
+    .filter((t) => !t.mySubmissionStatus || t.mySubmissionStatus === 'pending')
     .slice(0, 3)
 
-  const recentSubmissions = (submissions ?? []).slice(0, 4)
+  const pendingSubmissionsCount = submissions.filter((s) => s.status === 'pending').length
+  const recentSubmissions = submissions.slice(0, 4)
+
+  // ✨ معالجة دفاعية: اسم المستخدم الحقيقي (مع fallback)
+  const displayName = user?.name ?? user?.studentProfile?.name ?? 'طالب'
+  const firstName = displayName.split(' ')[0]
 
   return (
     <AppShell title="لوحة التحكم">
-      {/* Welcome Banner */}
+      {/* ✨ B6: Banner تذكيري للتحقق من البريد — يظهر فقط لغير المُتحقَّقين */}
+      {showEmailBanner && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-5 rounded-xl p-4 flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 grid place-items-center flex-shrink-0">
+              <Mail size={20} className="text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold text-sm text-amber-900 dark:text-amber-100 mb-0.5">
+                لم تؤكّد بريدك الإلكتروني بعد
+              </div>
+              <div className="text-xs text-amber-700 dark:text-amber-300">
+                تأكيد البريد يساعدنا في حماية حسابك واسترجاعه عند نسيان كلمة المرور.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link to="/verify-email">
+              <Button size="sm" variant="secondary">
+                <MailCheck size={14} />
+                تأكيد الآن
+              </Button>
+            </Link>
+            <button
+              onClick={dismissEmailBanner}
+              className="p-1.5 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+              aria-label="إخفاء التذكير"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Welcome Banner — ✨ ديناميكي بالكامل */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -59,9 +148,20 @@ export function DashboardPage() {
           style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.12), transparent 70%)' }} />
         <div className="relative z-10 flex items-center justify-between gap-6 flex-wrap">
           <div>
-            <h2 className="text-2xl font-bold mb-1.5">أهلاً أحمد 👋</h2>
+            {/* ✨ الاسم الحقيقي للمستخدم */}
+            <h2 className="text-2xl font-bold mb-1.5">أهلاً {firstName} 👋</h2>
             <p className="text-sm opacity-90 max-w-md leading-relaxed">
-              لديك <strong>3 مهام</strong> قادمة الأسبوع القادم، و <strong>تقديم واحد</strong> في انتظار المراجعة. واصل التقدم!
+              {upcomingTasks.length > 0 || pendingSubmissionsCount > 0 ? (
+                <>
+                  لديك <strong>{upcomingTasks.length} مهمة</strong> بحاجة لإكمال
+                  {pendingSubmissionsCount > 0 && (
+                    <>، و <strong>{pendingSubmissionsCount} تقديم</strong> في انتظار المراجعة.</>
+                  )}
+                  واصل التقدم!
+                </>
+              ) : (
+                <>أنت محدّث! لا توجد مهام معلّقة أو تقديمات بانتظار المراجعة. 🎉</>
+              )}
             </p>
           </div>
           <Link to="/submissions/new">
@@ -73,7 +173,23 @@ export function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
+      {/* ✨ تتبع الربط — يظهر فقط في وضع التطوير */}
+      <ApiDebug
+        label="GET /dashboard/stats"
+        transformedData={stats}
+        error={statsError}
+        expectedFields={['totalSubmissions', 'accepted', 'pending', 'averageScore']}
+      />
+      <ApiDebug
+        label="GET /tasks (for upcoming)"
+        transformedData={tasks}
+      />
+      <ApiDebug
+        label="GET /submissions (recent)"
+        transformedData={submissions}
+      />
+
+      {/* Stats Grid — ✨ استخدام camelCase مع fallback */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
         {statsLoading || !stats ? (
           <>
@@ -86,34 +202,30 @@ export function DashboardPage() {
           <>
             <StatCard
               label="إجمالي التقديمات"
-              value={stats.total_submissions}
+              value={stats.totalSubmissions ?? 0}
               icon={FileText}
               variant="accent"
-              delta={{ value: '+3 هذا الشهر', type: 'up' }}
               delay={0}
             />
             <StatCard
               label="مقبولة"
-              value={stats.accepted}
+              value={stats.accepted ?? 0}
               icon={CheckCircle2}
               variant="success"
-              delta={{ value: '67% نسبة القبول', type: 'up' }}
               delay={0.05}
             />
             <StatCard
               label="معلّقة"
-              value={stats.pending}
+              value={stats.pending ?? 0}
               icon={Clock}
               variant="warning"
-              delta={{ value: 'بانتظار المراجعة', type: 'neutral' }}
               delay={0.1}
             />
             <StatCard
               label="متوسط الدرجات"
-              value={stats.average_score}
+              value={stats.averageScore ?? 0}
               icon={Star}
               variant="info"
-              delta={{ value: '+0.6 عن الشهر الماضي', type: 'up' }}
               delay={0.15}
             />
           </>
@@ -135,9 +247,16 @@ export function DashboardPage() {
           </CardHeader>
 
           <div className="flex flex-col gap-3">
-            {upcomingTasks.map((task) => (
-              <TaskRow key={task.id} task={task} />
-            ))}
+            {upcomingTasks.length === 0 ? (
+              <div className="text-center py-6 text-ink-400 text-sm">
+                <CheckCircle2 size={28} className="mx-auto mb-2 text-success" />
+                لا توجد مهام معلّقة — أنت محدّث!
+              </div>
+            ) : (
+              upcomingTasks.map((task) => (
+                <TaskRow key={task.id} task={task} />
+              ))
+            )}
           </div>
         </Card>
 
@@ -151,9 +270,16 @@ export function DashboardPage() {
           </CardHeader>
 
           <div className="flex flex-col gap-1">
-            {recentSubmissions.map((sub) => (
-              <SubmissionRow key={sub.id} submission={sub} />
-            ))}
+            {recentSubmissions.length === 0 ? (
+              <div className="text-center py-6 text-ink-400 text-sm">
+                <FileText size={28} className="mx-auto mb-2 text-ink-300" />
+                لا توجد تقديمات بعد
+              </div>
+            ) : (
+              recentSubmissions.map((sub) => (
+                <SubmissionRow key={sub.id} submission={sub} />
+              ))
+            )}
           </div>
         </Card>
       </div>
@@ -190,12 +316,11 @@ export function DashboardPage() {
 }
 
 function TaskRow({ task }: { task: Task }) {
-  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
-  const iconBg =
-    task.type === 'final'
-      ? 'bg-warning-soft text-warning'
-      : 'bg-info-soft text-info'
-  const icon = task.type === 'final' ? <Trophy size={20} /> : <CheckSquare size={20} />
+  // ✨ معالجة دفاعية: قد تكون batch?.endDate undefined
+  const days = daysUntil(task.batch?.endDate ?? task.createdAt)
+  // ✨ لا يوجد نوع 'final' بعد — كل المهام 'hw' فقط
+  const iconBg = 'bg-info-soft text-info'
+  const icon = <CheckSquare size={20} />
 
   return (
     <Link
@@ -208,16 +333,19 @@ function TaskRow({ task }: { task: Task }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <div className="font-semibold text-ink-900 dark:text-ink-100 text-sm">{task.title}</div>
-          <Badge variant={task.type === 'final' ? 'warning' : 'info'}>
-            {task.type === 'final' ? 'Final' : 'HW'}
-          </Badge>
+          <Badge variant="info">HW</Badge>
+          {task.mySubmissionStatus === 'pending' && (
+            <Badge variant="warning">معلّق</Badge>
+          )}
         </div>
         <div className="text-xs text-ink-400 truncate">
           {task.description?.substring(0, 80)}...
         </div>
         <div className="flex items-center gap-2 mt-1.5 text-xs text-ink-400">
           <Calendar size={12} />
-          <span>متبقي {Math.max(days, 0)} أيام</span>
+          <span>
+            {days > 0 ? `متبقي ${days} أيام` : 'انتهى الموعد'}
+          </span>
         </div>
       </div>
       <Button variant="secondary" size="sm" className="flex-shrink-0">عرض</Button>
@@ -229,7 +357,7 @@ function SubmissionRow({ submission }: { submission: Submission }) {
   const statusConfig: Record<SubmissionStatus, { variant: 'success' | 'warning' | 'danger'; label: string; icon: React.ReactNode }> = {
     accepted: { variant: 'success', label: 'مقبول', icon: <CheckCircle2 size={12} /> },
     pending: { variant: 'warning', label: 'معلّق', icon: <Clock size={12} /> },
-    rejected: { variant: 'danger', label: 'مرفوض', icon: <Star size={12} /> },
+    rejected: { variant: 'danger', label: 'مرفوض', icon: <AlertCircle size={12} /> },
   }
   const status = statusConfig[submission.status]
   const title = submission.task?.title ?? submission.hackathon?.title ?? 'تقديم'
@@ -246,7 +374,8 @@ function SubmissionRow({ submission }: { submission: Submission }) {
       <Badge variant={status.variant}>
         {status.icon}
         {status.label}
-        {submission.score && ` · ${submission.score}/100`}
+        {/* ✨ P0-1: score أصلاً من 10 (بعد توحيد الـ backend) — لا قسمة */}
+        {submission.score != null && ` · ${submission.score.toFixed(1)}/10`}
       </Badge>
     </Link>
   )

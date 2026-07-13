@@ -1,7 +1,6 @@
 import { useState, type FormEvent, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
+import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Save, X, Code, Globe, Video, AlertTriangle } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -9,15 +8,13 @@ import { Card, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-import { mockGetSubmission, mockUpdateSubmission } from '@/lib/mockData'
+import { mockGetSubmission } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
-import { toast } from 'sonner'
+import { useUpdateSubmission } from '@/hooks/useSubmissions'
 
 export function SubmissionEditPage() {
   const { id } = useParams<{ id: string }>()
   const submissionId = Number(id)
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
 
   const { data: submission, isLoading } = useQuery({
     queryKey: queryKeys.submission(submissionId),
@@ -44,19 +41,7 @@ export function SubmissionEditPage() {
     }
   }, [submission])
 
-  const updateMutation = useMutation({
-    mutationFn: (data: typeof form) => mockUpdateSubmission(submissionId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.submission(submissionId) })
-      queryClient.invalidateQueries({ queryKey: queryKeys.submissions })
-      toast.success('تم تعديل التقديم بنجاح ✓')
-      navigate(`/submissions/${submissionId}`)
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message ?? 'حدث خطأ أثناء التعديل'
-      toast.error(msg)
-    },
-  })
+  const updateMutation = useUpdateSubmission(submissionId)
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 

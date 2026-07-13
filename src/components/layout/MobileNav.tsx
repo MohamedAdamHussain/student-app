@@ -97,12 +97,15 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
                   <div className="text-sm font-semibold text-ink-900 dark:text-ink-100 truncate">
                     {user?.name}
                   </div>
-                  <div className="text-xs text-ink-400">طالب · Batch 1</div>
+                  {/* ✨ P1-1: عرض اسم الدفعة ديناميكياً من user.batch */}
+                  <div className="text-xs text-ink-400">
+                    طالب · {user?.batch?.name ?? `Batch ${user?.batchId ?? '—'}`}
+                  </div>
                 </div>
               </Link>
               <button
                 onClick={() => {
-                  logout()
+                  void logout()
                   onOpenChange(false)
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-ink-600 dark:text-ink-300 text-sm font-medium hover:bg-ink-100 dark:hover:bg-ink-800 transition-colors"

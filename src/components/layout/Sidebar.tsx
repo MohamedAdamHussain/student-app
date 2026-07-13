@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   User,
@@ -13,7 +14,9 @@ import {
 import { Logo } from '@/components/ui/Logo'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAuth } from '@/context/AuthContext'
-import { cn } from '@/lib/utils'
+import { mockGetTasks, mockGetHackathons } from '@/lib/mockData'
+import { queryKeys } from '@/lib/queryClient'
+import { daysUntil, cn } from '@/lib/utils'
 
 interface NavItemDef {
   to: string
@@ -22,21 +25,53 @@ interface NavItemDef {
   badge?: number
 }
 
-const mainNav: NavItemDef[] = [
-  { to: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
-  { to: '/profile', label: 'ملفي الشخصي', icon: User },
-]
+// ✨ P1-2: badges تُحسب ديناميكياً (يتم تمريرها كـ props بدلاً من hardcoded)
+function buildNav(pendingTasksCount: number, activeHackathonsCount: number) {
+  const mainNav: NavItemDef[] = [
+    { to: '/dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
+    { to: '/profile', label: 'ملفي الشخصي', icon: User },
+  ]
 
-const workNav: NavItemDef[] = [
-  { to: '/tasks', label: 'المهام', icon: CheckSquare, badge: 5 },
-  { to: '/hackathons', label: 'الهاكاثونات', icon: Trophy, badge: 2 },
-  { to: '/submissions', label: 'تقديماتي', icon: FileText },
-  { to: '/teams', label: 'فرقي', icon: Users },
-]
+  const workNav: NavItemDef[] = [
+    // ✨ badge يظهر فقط لو > 0
+    { to: '/tasks', label: 'المهام', icon: CheckSquare, ...(pendingTasksCount > 0 ? { badge: pendingTasksCount } : {}) },
+    { to: '/hackathons', label: 'الهاكاثونات', icon: Trophy, ...(activeHackathonsCount > 0 ? { badge: activeHackathonsCount } : {}) },
+    { to: '/submissions', label: 'تقديماتي', icon: FileText },
+    { to: '/teams', label: 'فرقي', icon: Users },
+  ]
+
+  return { mainNav, workNav }
+}
 
 export function Sidebar() {
   const location = useLocation()
   const { user, logout } = useAuth()
+
+  // ✨ P1-2: جلب المهام والهاكاثونات لحساب الـ badges
+  const { data: tasksData } = useQuery({
+    queryKey: queryKeys.tasks,
+    queryFn: () => mockGetTasks(),
+    staleTime: 60 * 1000, // 1 min cache
+  })
+  const { data: hackathonsData } = useQuery({
+    queryKey: queryKeys.hackathons,
+    queryFn: () => mockGetHackathons(),
+    staleTime: 60 * 1000,
+  })
+
+  // ✨ Stage 7: استخرج data من PaginatedResponse
+  const tasks = tasksData?.data ?? []
+  const hackathons = hackathonsData?.data ?? []
+
+  // ✨ حساب: المهام غير المسلّمة + الهاكاثونات النشطة (deadline > الآن)
+  const pendingTasksCount = tasks.filter(
+    (t) => !t.mySubmissionStatus || t.mySubmissionStatus === 'pending',
+  ).length
+  const activeHackathonsCount = hackathons.filter(
+    (h) => daysUntil(h.deadline) >= 0,
+  ).length
+
+  const { mainNav, workNav } = buildNav(pendingTasksCount, activeHackathonsCount)
 
   const isActive = (to: string) =>
     location.pathname === to || (to !== '/dashboard' && location.pathname.startsWith(to))
@@ -77,7 +112,7 @@ export function Sidebar() {
           <span>الإعدادات</span>
         </Link>
         <button
-          onClick={logout}
+          onClick={() => { void logout() }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-ink-600 dark:text-ink-300 text-sm font-medium hover:bg-ink-100 dark:hover:bg-ink-800 transition-colors mb-0.5"
         >
           <LogOut size={18} />
@@ -95,7 +130,10 @@ export function Sidebar() {
             <div className="text-sm font-semibold text-ink-900 dark:text-ink-100 truncate">
               {user?.name}
             </div>
-            <div className="text-xs text-ink-400">طالب · Batch 1</div>
+            {/* ✨ P1-1: عرض اسم الدفعة ديناميكياً من user.batch */}
+            <div className="text-xs text-ink-400">
+              طالب · {user?.batch?.name ?? `Batch ${user?.batchId ?? '—'}`}
+            </div>
           </div>
         </Link>
       </div>

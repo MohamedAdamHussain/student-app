@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useParams, Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Lightbulb, Save, X, AlertTriangle, Code, Globe, Video, Sparkles,
@@ -11,16 +11,15 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea } from '@/components/ui/Input'
-import { mockGetHackathon, mockCreateProposal } from '@/lib/mockData'
-import { queryKeys, proposalKeys } from '@/lib/queryClient'
+import { mockGetHackathon } from '@/lib/mockData'
+import { queryKeys } from '@/lib/queryClient'
+import { useCreateProposal } from '@/hooks/useProposals'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 export function FeatureProposalBuilderPage() {
   const { id } = useParams<{ id: string }>()
   const hackathonId = Number(id)
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
 
   const { data: hackathon } = useQuery({
     queryKey: queryKeys.hackathon(hackathonId),
@@ -39,16 +38,7 @@ export function FeatureProposalBuilderPage() {
     implementation_notes: '',
   })
 
-  const createMutation = useMutation({
-    mutationFn: (data: typeof form) => mockCreateProposal(hackathonId, data),
-    onSuccess: (proposal) => {
-      queryClient.invalidateQueries({ queryKey: proposalKeys.hackathon(hackathonId) })
-      queryClient.invalidateQueries({ queryKey: proposalKeys.mine })
-      toast.success('تم إرسال اقتراحك بنجاح! 🚀')
-      navigate(`/proposals/${proposal.id}`)
-    },
-    onError: (err: any) => toast.error(err?.message ?? 'حدث خطأ أثناء الإرسال'),
-  })
+  const createMutation = useCreateProposal(hackathonId)
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
 

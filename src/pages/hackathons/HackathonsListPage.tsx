@@ -8,22 +8,30 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Pagination } from '@/components/common/Pagination'
 import { mockGetHackathons } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
 import { daysUntil, cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import type { Hackathon } from '@/types'
 
 type TabKey = 'active' | 'upcoming' | 'completed'
 
 export function HackathonsListPage() {
   const [tab, setTab] = useState<TabKey>('active')
+  const [page, setPage] = useState(1)
+  const { user } = useAuth()
 
-  const { data: hackathons, isLoading } = useQuery({
-    queryKey: queryKeys.hackathons,
-    queryFn: mockGetHackathons,
+  // ✨ Stage 7: PaginatedResponse
+  const { data: hackathonsData, isLoading } = useQuery({
+    queryKey: [...queryKeys.hackathons, page],
+    queryFn: () => mockGetHackathons(page),
   })
 
-  const filtered = (hackathons ?? []).filter((h) => {
+  const hackathons = hackathonsData?.data ?? []
+  const meta = hackathonsData?.meta
+
+  const filtered = hackathons.filter((h) => {
     const days = daysUntil(h.deadline)
     if (tab === 'active') return days >= 0 && days <= 7
     if (tab === 'upcoming') return days > 7
@@ -31,15 +39,18 @@ export function HackathonsListPage() {
   })
 
   const counts = {
-    active: hackathons?.filter((h) => daysUntil(h.deadline) >= 0 && daysUntil(h.deadline) <= 7).length ?? 0,
-    upcoming: hackathons?.filter((h) => daysUntil(h.deadline) > 7).length ?? 0,
-    completed: hackathons?.filter((h) => daysUntil(h.deadline) < 0).length ?? 0,
+    active: hackathons.filter((h) => daysUntil(h.deadline) >= 0 && daysUntil(h.deadline) <= 7).length,
+    upcoming: hackathons.filter((h) => daysUntil(h.deadline) > 7).length,
+    completed: hackathons.filter((h) => daysUntil(h.deadline) < 0).length,
   }
+
+  // ✨ P1-1: title ديناميكي
+  const batchName = user?.batch?.name ?? (user?.batchId ? `Batch ${user.batchId}` : 'دفعتك')
 
   return (
     <AppShell title="الهاكاثونات">
       <PageHeader
-        title="هاكاثونات Batch 1 - 2026"
+        title={`هاكاثونات ${batchName}`}
         subtitle="مسابقات برمجية مكثفة بمدة محدودة · شارك بفريق أو فردياً"
         breadcrumbs={[{ label: 'الرئيسية', to: '/dashboard' }, { label: 'الهاكاثونات' }]}
       />
@@ -81,6 +92,15 @@ export function HackathonsListPage() {
             </motion.div>
           ))}
         </div>
+      )}
+
+      {/* ✨ Stage 7: Pagination controls */}
+      {meta && (
+        <Pagination
+          meta={meta}
+          onPageChange={(p) => setPage(p)}
+          loading={isLoading}
+        />
       )}
     </AppShell>
   )
@@ -159,7 +179,8 @@ function HackathonCard({ hackathon }: { hackathon: Hackathon }) {
           {hackathon.myRank && (
             <Badge variant="success">
               <Medal size={12} />
-              المركز #{hackathon.myRank} · {hackathon.myScore}/100
+              {/* ✨ P0-1: score من 10 — لا /100 */}
+              المركز #{hackathon.myRank} · {hackathon.myScore?.toFixed(1)}/10
             </Badge>
           )}
           {!isCompleted && !hackathon.myTeam && (

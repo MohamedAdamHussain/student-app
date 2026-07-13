@@ -6,6 +6,9 @@ import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { ProfileEditPage } from '@/pages/profile/ProfileEditPage'
@@ -21,8 +24,12 @@ import { TeamsListPage } from '@/pages/teams/TeamsListPage'
 import { TeamDetailsPage } from '@/pages/teams/TeamDetailsPage'
 import { FeatureProposalBuilderPage } from '@/pages/proposals/FeatureProposalBuilderPage'
 import { FeatureProposalDetailsPage } from '@/pages/proposals/FeatureProposalDetailsPage'
+import { FeatureProposalEditPage } from '@/pages/proposals/FeatureProposalEditPage'
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { getPageTitle } from '@/components/layout/AppShell'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import { ConfirmProvider } from '@/components/common/ConfirmDialog'
 import type { JSX } from 'react'
 import type { UserRole } from '@/types'
 
@@ -87,6 +94,11 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* ✨ B6: صفحة تأكيد البريد — عامة (لا تتطلب auth).
+          تدعم القدوم من رابط الإيميل (?token=xxx&email=yyy) أو الإدخال اليدوي. */}
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
       {/* ✨ كل صفحات الطالب محمية بـ role:student */}
@@ -140,6 +152,15 @@ function AppRoutes() {
       <Route path="/proposals/:id" element={
         <ProtectedRoute allowedRoles={['student']}><FeatureProposalDetailsPage /></ProtectedRoute>
       } />
+      {/* ✨ FIX #3: مسار تعديل المقترح (للحالات pending و needs_revision) */}
+      <Route path="/proposals/:id/edit" element={
+        <ProtectedRoute allowedRoles={['student']}><FeatureProposalEditPage /></ProtectedRoute>
+      } />
+
+      {/* ✨ Settings page */}
+      <Route path="/settings" element={
+        <ProtectedRoute allowedRoles={['student']}><SettingsPage /></ProtectedRoute>
+      } />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -153,7 +174,13 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
-            <AppRoutes />
+            {/* ✨ ConfirmProvider: بديل موحّد لـ window.confirm (انظر src/components/common/ConfirmDialog) */}
+            <ConfirmProvider>
+              {/* ✨ P2-3: ErrorBoundary يلتقط أي runtime error في الـ routes */}
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+            </ConfirmProvider>
             <Toaster
               position="top-center"
               dir="rtl"

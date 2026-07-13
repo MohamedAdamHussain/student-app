@@ -4,17 +4,20 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   FileText, CheckCircle2, Clock, XCircle, Star, Plus,
-  Eye, Trash2, Trophy, CheckSquare, Video,
+  Eye, Trash2, Trophy, CheckSquare,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
+import { Pagination } from '@/components/common/Pagination'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { mockGetSubmissions, mockGetDashboardStats } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
+import { useDeleteSubmission } from '@/hooks/useSubmissions'
+import { useConfirm } from '@/components/common/ConfirmDialog'
 import { formatRelative, cn } from '@/lib/utils'
 import type { Submission, SubmissionStatus } from '@/types'
 
@@ -22,19 +25,38 @@ type StatusFilter = '' | SubmissionStatus
 type TypeFilter = '' | 'hw' | 'final' | 'hackathon'
 
 export function SubmissionsListPage() {
+  const confirm = useConfirm()
+  const deleteMutation = useDeleteSubmission()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('')
+  const [page, setPage] = useState(1)
 
-  const { data: submissions, isLoading } = useQuery({
-    queryKey: queryKeys.submissions,
-    queryFn: mockGetSubmissions,
+  // ✨ Stage 7: PaginatedResponse + page parameter
+  const { data: submissionsData, isLoading } = useQuery({
+    queryKey: [...queryKeys.submissions, page],
+    queryFn: () => mockGetSubmissions(page),
   })
   const { data: stats } = useQuery({
     queryKey: queryKeys.stats,
     queryFn: mockGetDashboardStats,
   })
 
-  const filtered = (submissions ?? []).filter((s) => {
+  // ✨ Stage 7: استخرج data و meta
+  const submissions = submissionsData?.data ?? []
+  const meta = submissionsData?.meta
+
+  const handleDelete = async (submission: Submission) => {
+    const ok = await confirm({
+      title: 'حذف التقديم',
+      message: `هل أنت متأكد من حذف تقديم "${submission.task?.title ?? submission.hackathon?.title ?? 'التقديم'}"؟`,
+      confirmText: 'حذف',
+      variant: 'danger',
+    })
+    if (!ok) return
+    deleteMutation.mutate(submission.id)
+  }
+
+  const filtered = submissions.filter((s) => {
     if (statusFilter && s.status !== statusFilter) return false
     if (typeFilter === 'hw' && !(s.task && s.task.type === 'hw')) return false
     if (typeFilter === 'final' && !(s.task && s.task.type === 'final')) return false
@@ -46,7 +68,7 @@ export function SubmissionsListPage() {
     <AppShell title="تقديماتي">
       <PageHeader
         title="تقديماتي"
-        subtitle={`إجمالي ${stats?.total_submissions ?? 0} تقديماً · ${stats?.accepted ?? 0} مقبولة · ${stats?.pending ?? 0} معلّقة`}
+        subtitle={`إجمالي ${stats?.totalSubmissions ?? 0} تقديماً · ${stats?.accepted ?? 0} مقبولة · ${stats?.pending ?? 0} معلّقة`}
         breadcrumbs={[{ label: 'الرئيسية', to: '/dashboard' }, { label: 'تقديماتي' }]}
         actions={
           <Link to="/submissions/new">
@@ -65,7 +87,7 @@ export function SubmissionsListPage() {
         <StatCard label="مرفوضة" value={stats?.rejected ?? 0} icon={XCircle} variant="danger" delay={0.1} />
         <StatCard
           label="متوسط الدرجات"
-          value={stats?.average_score ?? 0}
+          value={stats?.averageScore ?? 0}
           icon={Star}
           variant="info"
           delay={0.15}
@@ -130,18 +152,44 @@ export function SubmissionsListPage() {
               </thead>
               <tbody>
                 {filtered.map((sub, i) => (
-                  <SubmissionRow key={sub.id} submission={sub} delay={i * 0.03} />
+                  <SubmissionRow
+                    key={sub.id}
+                    submission={sub}
+                    delay={i * 0.03}
+                    onDelete={handleDelete}
+                    deleting={deleteMutation.isPending && deleteMutation.variables === sub.id}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {/* ✨ Stage 7: Pagination controls */}
+      {meta && (
+        <Pagination
+          meta={meta}
+          onPageChange={(p) => setPage(p)}
+          loading={isLoading}
+        />
+      )}
     </AppShell>
   )
 }
 
-function SubmissionRow({ submission, delay }: { submission: Submission; delay: number }) {
+function SubmissionRow({
+  submission,
+  delay,
+  onDelete,
+  deleting,
+}: {
+  submission: Submission
+  delay: number
+  // ✨ P1-6: تفعيل زر الحذف
+  onDelete?: (submission: Submission) => void
+  deleting?: boolean
+}) {
   const statusConfig: Record<SubmissionStatus, { variant: 'success' | 'warning' | 'danger'; label: string; icon: typeof CheckCircle2 }> = {
     accepted: { variant: 'success', label: 'مقبول', icon: CheckCircle2 },
     pending: { variant: 'warning', label: 'معلّق', icon: Clock },
@@ -194,9 +242,10 @@ function SubmissionRow({ submission, delay }: { submission: Submission; delay: n
         </Badge>
       </td>
       <td className="p-3">
-        {submission.score ? (
+        {submission.score != null ? (
           <span className="font-bold text-success">
-            {(submission.score / 10).toFixed(1)}/10
+            {/* ✨ P0-1: score أصلاً من 10 (بعد توحيد الـ backend) */}
+            {submission.score.toFixed(1)}/10
           </span>
         ) : (
           <span className="text-ink-400">—</span>
@@ -209,14 +258,24 @@ function SubmissionRow({ submission, delay }: { submission: Submission; delay: n
               <Eye size={14} />
             </Button>
           </Link>
-          {submission.status === 'pending' && (
+          {/* ✨ P1-6: زر الحذف مُفعّل (كان decorative) — فقط للتقديمات المعلّقة */}
+          {submission.status === 'pending' && onDelete && (
             <Button
               variant="ghost"
               size="sm"
               className="!p-2 !w-8 !h-8 text-danger hover:bg-danger-soft"
-              onClick={(e) => e.stopPropagation()}
+              disabled={deleting}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(submission)
+              }}
+              aria-label="حذف التقديم"
             >
-              <Trash2 size={14} />
+              {deleting ? (
+                <span className="w-3.5 h-3.5 border-2 border-danger/40 border-t-danger rounded-full animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
             </Button>
           )}
         </div>

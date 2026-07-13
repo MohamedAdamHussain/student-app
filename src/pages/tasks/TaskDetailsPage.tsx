@@ -1,9 +1,8 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
-  Trophy,
-  CheckSquare,
   Calendar,
   Clock,
   Users,
@@ -12,6 +11,8 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
+  UserPlus,
+  Lock,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -21,7 +22,10 @@ import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { mockGetTask } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
-import { daysUntil } from '@/lib/utils'
+import { useTeamsForTeamable, useMyJoinRequests } from '@/hooks/useJoinRequests'
+import { JoinRequestModal } from '@/components/teams/JoinRequestModal'
+import { daysUntil, gradientFor } from '@/lib/utils'
+import type { TeamPreview } from '@/types'
 
 export function TaskDetailsPage() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +37,14 @@ export function TaskDetailsPage() {
     enabled: !!taskId,
   })
 
+  // ✨ اكتشاف الفرق المتاحة للانضمام (لمهمة جماعية).
+  const { data: availableTeams } = useTeamsForTeamable(
+    task?.isTeam ? 'task' : null,
+    taskId,
+  )
+  const { data: myRequests } = useMyJoinRequests()
+  const [joinPreview, setJoinPreview] = useState<TeamPreview | null>(null)
+
   if (isLoading || !task) {
     return (
       <AppShell title="تفاصيل المهمة">
@@ -42,7 +54,7 @@ export function TaskDetailsPage() {
   }
 
   const isFinal = task.type === 'final'
-  const days = daysUntil(task.batch?.end_date ?? task.createdAt)
+  const days = daysUntil(task.batch?.endDate ?? task.createdAt)
   const hasSubmitted = !!task.mySubmissionStatus
 
   return (
@@ -109,7 +121,7 @@ export function TaskDetailsPage() {
               <div className="text-xs text-ink-400 uppercase font-semibold mb-1.5">الموعد النهائي</div>
               <div className="font-bold text-lg flex items-center gap-1">
                 <Calendar size={16} className="text-warning" />
-                {task.batch?.end_date}
+                {task.batch?.endDate}
               </div>
               <div className="text-sm text-warning mt-0.5">{Math.max(days, 0)} أيام متبقية</div>
             </div>
@@ -187,7 +199,7 @@ export function TaskDetailsPage() {
                 <div>
                   <div className="font-bold text-warning">لم تُسلِّم بعد</div>
                   <div className="text-sm text-ink-600 dark:text-ink-300">
-                    آخر موعد للتسليم: {task.batch?.end_date}
+                    آخر موعد للتسليم: {task.batch?.endDate}
                   </div>
                 </div>
               </div>
@@ -198,7 +210,6 @@ export function TaskDetailsPage() {
                     تسليم الآن
                   </Button>
                 </Link>
-                <Button variant="secondary">حفظ كمسودة</Button>
               </div>
             </Card>
           ) : (
@@ -217,6 +228,74 @@ export function TaskDetailsPage() {
                       : 'تم رفض التقديم - راجع ملاحظات المسؤول'}
                   </div>
                 </div>
+              </div>
+            </Card>
+          )}
+
+          {/* ✨ الفرق المتاحة للانضمام — لمهمة جماعية غير مُسلَّمة. */}
+          {task.isTeam && !hasSubmitted && availableTeams && availableTeams.length > 0 && (
+            <Card>
+              <CardTitle className="mb-1">الفرق المتاحة للانضمام</CardTitle>
+              <p className="text-sm text-ink-400 mb-4">
+                اطلب الانضمام لفريق قائم — القائد يراجع طلبك ويوافق.
+              </p>
+              <div className="flex flex-col gap-3">
+                {availableTeams.map((t) => {
+                  const myReq = myRequests?.find((r) => r.teamId === t.id)
+                  const requested = !!myReq
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center gap-4 p-4 border border-ink-200 dark:border-ink-800 rounded-md"
+                    >
+                      <div
+                        className="w-11 h-11 rounded-md grid place-items-center text-white font-bold flex-shrink-0"
+                        style={{ background: `linear-gradient(135deg, ${gradientFor(t.name)[0]}, ${gradientFor(t.name)[1]})` }}
+                      >
+                        {t.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold">{t.name}</div>
+                        <div className="text-xs text-ink-400">
+                          {t.membersCount}
+                          {t.maxTeamSize ? ` / ${t.maxTeamSize}` : ''} أعضاء
+                          {t.leaderName ? ` · القائد: ${t.leaderName}` : ''}
+                        </div>
+                      </div>
+                      {t.canRequestJoin && !requested && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setJoinPreview({
+                              id: t.id,
+                              name: t.name,
+                              teamableType: 'task',
+                              teamableId: task.id,
+                              teamableTitle: task.title,
+                              membersCount: t.membersCount,
+                              maxTeamSize: t.maxTeamSize,
+                              leaderName: t.leaderName,
+                              canRequestJoin: true,
+                            })
+                          }
+                        >
+                          <UserPlus size={14} />
+                          طلب الانضمام
+                        </Button>
+                      )}
+                      {requested && (
+                        <Badge variant={myReq!.status === 'approved' ? 'success' : myReq!.status === 'rejected' ? 'danger' : 'warning'}>
+                          {myReq!.status === 'approved' ? 'مقبول' : myReq!.status === 'rejected' ? 'مرفوض' : 'بانتظار القائد'}
+                        </Badge>
+                      )}
+                      {!t.canRequestJoin && !requested && (
+                        <span className="text-xs text-ink-400 flex items-center gap-1">
+                          <Lock size={12} /> غير متاح
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </Card>
           )}
@@ -267,23 +346,32 @@ export function TaskDetailsPage() {
             <CardTitle className="mb-4">إحصائيات المهمة</CardTitle>
             <div className="flex flex-col gap-3">
               <div className="flex justify-between">
-                <span className="text-sm text-ink-500">إجمالي الطلاب</span>
-                <span className="font-bold">24</span>
+                <span className="text-sm text-ink-500">عدد التقديمات</span>
+                <span className="font-bold text-success">{task.submissionsCount ?? 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-ink-500">سلّموا</span>
-                <span className="font-bold text-success">{task.submissionsCount}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-ink-500">نسبة التسليم</span>
+                <span className="text-sm text-ink-500">حالتي</span>
                 <span className="font-bold">
-                  {Math.round(((task.submissionsCount ?? 0) / 24) * 100)}%
+                  {hasSubmitted
+                    ? task.mySubmissionStatus === 'accepted'
+                      ? 'مقبول ✓'
+                      : task.mySubmissionStatus === 'pending'
+                      ? 'معلّق'
+                      : 'مرفوض'
+                    : 'لم أُسلّم'}
                 </span>
               </div>
             </div>
           </Card>
         </aside>
       </div>
+
+      {/* ✨ نافذة طلب الانضمام */}
+      <JoinRequestModal
+        open={!!joinPreview}
+        onOpenChange={(v) => !v && setJoinPreview(null)}
+        preview={joinPreview}
+      />
     </AppShell>
   )
 }

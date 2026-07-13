@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, X, Trophy, Users, Crown, UserPlus, Star, CheckSquare,
+  Plus, X, Trophy, Users, Crown, UserPlus, CheckSquare,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
+import { ApiDebug } from '@/components/common/ApiDebug'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -14,28 +15,53 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Input, Select } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/context/AuthContext'
-import { mockGetTeams, mockGetHackathons, mockCreateTeam } from '@/lib/mockData'
+import { mockGetTeams, mockGetHackathons, mockGetTasks, mockCreateTeam } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
+import { useMyJoinRequests } from '@/hooks/useJoinRequests'
+import { extractApiMessage } from '@/lib/errors'
 import { toast } from 'sonner'
 import { formatRelative, gradientFor, cn } from '@/lib/utils'
-import type { Team } from '@/types'
+import type { Team, Hackathon, Task } from '@/types'
 
 type TabKey = 'all' | 'leader' | 'member'
 
 export function TeamsListPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [tab, setTab] = useState<TabKey>('all')
   const [modalOpen, setModalOpen] = useState(false)
+  // ✨ استخدام useSearchParams بدلاً من window.location (أكثر موثوقية)
+  const [searchParams] = useSearchParams()
+  const preselectedHackathonId = searchParams.get('hackathon_id')
+  const preselectedTaskId = searchParams.get('task_id')
 
-  const { data: teams, isLoading } = useQuery({
+  const { data: teams, isLoading, error: teamsError } = useQuery({
     queryKey: queryKeys.teams,
     queryFn: mockGetTeams,
   })
-  const { data: hackathons } = useQuery({
+  const { data: hackathonsData } = useQuery({
     queryKey: queryKeys.hackathons,
-    queryFn: mockGetHackathons,
+    queryFn: () => mockGetHackathons(),
   })
+  const { data: tasksData } = useQuery({
+    queryKey: queryKeys.tasks,
+    queryFn: () => mockGetTasks(),
+  })
+  // ✨ طلبات الانضمام المُرسَلة (حالتها).
+  const { data: myJoinRequests } = useMyJoinRequests()
 
+  // ✨ Stage 7: استخرج data من PaginatedResponse
+  const hackathons = hackathonsData?.data ?? []
+  const tasks = tasksData?.data ?? []
+
+  // ✨ فتح الـ Modal تلقائياً عند وجود query param
+  useEffect(() => {
+    if (preselectedHackathonId || preselectedTaskId) {
+      setModalOpen(true)
+    }
+  }, [preselectedHackathonId, preselectedTaskId])
+
+  // ✨ معالجة دفاعية: myTeams بفلترة المستخدم الحالي
   const myTeams = (teams ?? []).filter((t) =>
     t.teamMembers.some((m) => m.userId === user?.id),
   )
@@ -70,6 +96,48 @@ export function TeamsListPage() {
         }
       />
 
+      {/* ✨ تتبع الربط — يظهر فقط في وضع التطوير */}
+      <ApiDebug
+        label="GET /my-teams"
+        transformedData={teams}
+        error={teamsError}
+        expectedFields={['teamableType', 'teamableId', 'teamMembers']}
+      />
+      <ApiDebug
+        label="GET /hackathons"
+        transformedData={hackathons}
+        expectedFields={['isTeam', 'maxTeamSize']}
+      />
+
+      {/* ✨ طلبات الانضمام المُرسَلة — حالة الطلبات المعلّقة/المقبولة/المرفوضة. */}
+      {myJoinRequests && myJoinRequests.length > 0 && (
+        <Card className="mb-5">
+          <CardTitle className="mb-3">طلبات الانضمام المُرسَلة ({myJoinRequests.length})</CardTitle>
+          <div className="flex flex-col gap-2">
+            {myJoinRequests.map((req) => {
+              const teamableTitle = (req.team?.teamable as { title?: string } | undefined)?.title ?? '—'
+              const variant = req.status === 'approved' ? 'success' : req.status === 'rejected' ? 'danger' : 'warning'
+              const label = req.status === 'approved' ? 'مقبول' : req.status === 'rejected' ? 'مرفوض' : 'بانتظار القائد'
+              return (
+                <div
+                  key={req.id}
+                  className="flex items-center justify-between gap-3 p-3 border border-ink-200 dark:border-ink-800 rounded-md"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm truncate">
+                      {req.team?.name ?? 'فريق'}
+                      <span className="text-ink-400 font-normal"> · {teamableTitle}</span>
+                    </div>
+                    <div className="text-xs text-ink-400">{formatRelative(req.createdAt)}</div>
+                  </div>
+                  <Badge variant={variant}>{label}</Badge>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 border-b border-ink-200 dark:border-ink-800 mb-5">
         {(['all', 'leader', 'member'] as TabKey[]).map((t) => (
@@ -100,7 +168,11 @@ export function TeamsListPage() {
             <Card className="text-center py-12">
               <Users size={48} className="mx-auto mb-4 text-ink-300" />
               <h3 className="font-semibold mb-1">لا توجد فرق</h3>
-              <p className="text-sm text-ink-400 mb-4">أنشئ فريقك الأول للمشاركة في الهاكاثونات</p>
+              <p className="text-sm text-ink-400 mb-4">
+                {preselectedHackathonId || preselectedTaskId
+                  ? 'أنشئ فريقك الأول للمشاركة'
+                  : 'أنشئ فريقك الأول للمشاركة في المهام الجماعية أو الهاكاثونات'}
+              </p>
               <Button onClick={() => setModalOpen(true)}>
                 <Plus size={14} />
                 إنشاء فريق
@@ -121,35 +193,18 @@ export function TeamsListPage() {
             </div>
           )}
 
-          {/* Other teams to join */}
+          {/* Other teams to join — ✨ عرض ذكي بدون زر "طلب الانضمام" وهمي */}
           {otherTeams.length > 0 && (
             <>
-              <h2 className="text-lg font-bold mt-8 mb-4">فرق تبحث عن أعضاء</h2>
+              <h2 className="text-lg font-bold mt-8 mb-4">فرق أخرى في دفعتك</h2>
               <div className="grid md:grid-cols-2 gap-5">
-                {otherTeams.slice(0, 2).map((team) => (
-                  <Card key={team.id} className="border-dashed">
-                    <div className="flex items-center justify-between mb-3">
-                      <Badge variant="warning">هاكاثون</Badge>
-                      <span className="text-xs text-ink-400">
-                        {team.teamMembers.length}/{team.teamable?.maxTeamSize ?? 4} أعضاء
-                      </span>
-                    </div>
-                    <h3 className="font-bold mb-2">{team.name}</h3>
-                    <p className="text-sm text-ink-500 mb-4 line-clamp-2">
-                      فريق يبحث عن عضو إضافي. القائد: {team.teamMembers.find((m) => m.isLeader)?.user.name}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center -space-x-2 space-x-reverse">
-                        {team.teamMembers.slice(0, 4).map((m) => (
-                          <Avatar key={m.id} name={m.user.name} size="sm" className="border-2 border-white dark:border-ink-900" />
-                        ))}
-                      </div>
-                      <Button size="sm">
-                        <UserPlus size={14} />
-                        طلب الانضمام
-                      </Button>
-                    </div>
-                  </Card>
+                {otherTeams.slice(0, 4).map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    currentUserId={user?.id ?? 0}
+                    isOther
+                  />
                 ))}
               </div>
             </>
@@ -157,17 +212,40 @@ export function TeamsListPage() {
         </>
       )}
 
-      <CreateTeamModal open={modalOpen} onOpenChange={setModalOpen} hackathons={hackathons ?? []} />
+      <CreateTeamModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        hackathons={hackathons.filter((h) => h.isTeam)}
+        tasks={tasks.filter((t) => t.isTeam)}
+        defaultHackathonId={preselectedHackathonId}
+        defaultTaskId={preselectedTaskId}
+        onCreated={(teamId) => navigate(`/teams/${teamId}`)}
+      />
     </AppShell>
   )
 }
 
-function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }) {
+function TeamCard({
+  team,
+  currentUserId,
+  isOther,
+}: {
+  team: Team
+  currentUserId: number
+  isOther?: boolean
+}) {
   const myMembership = team.teamMembers.find((m) => m.userId === currentUserId)
   const isLeader = myMembership?.isLeader
+  // ✨ معالجة دفاعية لـ maxTeamSize
   const maxSize = team.teamable?.maxTeamSize ?? 4
   const isFull = team.teamMembers.length >= maxSize
-  const isCompleted = team.teamable && 'deadline' in team.teamable && new Date(team.teamable.deadline).getTime() < Date.now()
+  // ✨ P2-1: استخدم team.teamableType مباشرة (typed كـ TeamableType الآن)
+  const teamableType = team.teamableType
+  const isHackathon = teamableType === 'hackathon'
+  // ✨ P2-1: type-safe access للـ deadline عبر discriminated union pattern
+  const teamable = team.teamable
+  const deadline = teamable && 'deadline' in teamable ? teamable.deadline : null
+  const isCompleted = deadline ? new Date(deadline).getTime() < Date.now() : false
 
   return (
     <Link to={`/teams/${team.id}`}>
@@ -187,7 +265,11 @@ function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }
                 أنا القائد
               </Badge>
             )}
-            <Badge variant="warning">هاكاثون</Badge>
+            {/* ✨ Badge ديناميكي حسب نوع الفريق */}
+            <Badge variant={isHackathon ? 'warning' : 'info'}>
+              {isHackathon ? <Trophy size={12} /> : <CheckSquare size={12} />}
+              {isHackathon ? 'هاكاثون' : 'مهمة'}
+            </Badge>
             {isCompleted && <Badge variant="neutral">منتهي</Badge>}
           </div>
           <span className="text-xs text-ink-400">
@@ -197,7 +279,8 @@ function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }
 
         <h3 className="text-lg font-bold mb-2">{team.name}</h3>
         <p className="text-sm text-ink-500 mb-4 line-clamp-1">
-          لـ {(team.teamable as any)?.title ?? 'هاكاثون'}
+          {/* ✨ P2-1: type-safe access للـ title */}
+          لـ {team.teamable?.title ?? (isHackathon ? 'هاكاثون' : 'مهمة')}
         </p>
 
         <div className="flex items-center justify-between">
@@ -207,6 +290,7 @@ function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }
                 key={m.id}
                 name={m.user.name}
                 size="sm"
+                src={m.user.avatar ?? undefined}
                 className="border-2 border-white dark:border-ink-900"
               />
             ))}
@@ -220,21 +304,59 @@ function TeamCard({ team, currentUserId }: { team: Team; currentUserId: number }
             {isFull ? 'مكتمل' : `متاح ${maxSize - team.teamMembers.length} مقعد`}
           </span>
         </div>
+
+        {isOther && (
+          <div className="mt-3 pt-3 border-t border-ink-100 dark:border-ink-800 text-xs text-ink-400">
+            القائد: {team.teamMembers.find((m) => m.isLeader)?.user.name ?? '—'}
+          </div>
+        )}
       </Card>
     </Link>
   )
 }
 
 function CreateTeamModal({
-  open, onOpenChange, hackathons,
+  open,
+  onOpenChange,
+  hackathons,
+  tasks,
+  defaultHackathonId,
+  defaultTaskId,
+  onCreated,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  hackathons: any[]
+  hackathons: Hackathon[]
+  tasks: Task[]
+  defaultHackathonId?: string | null
+  defaultTaskId?: string | null
+  // ✨ P0-4: استبدل window.location.href بـ callback (يحافظ على SPA + cache)
+  onCreated: (teamId: number) => void
 }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
-  const [hackathonId, setHackathonId] = useState('')
+
+  // ✨ تحديد القيمة الافتراضية: هاكاثون أو مهمة مُختارة مسبقاً
+  const teamHackathons = hackathons
+  const teamTasks = tasks
+
+  // ✨ تحديد الاختيار الافتراضي بناءً على الـ query param
+  const initialTeamableType: 'hackathon' | 'task' = defaultTaskId ? 'task' : 'hackathon'
+  const initialTeamableId = defaultHackathonId ?? defaultTaskId ?? ''
+
+  const [teamableType, setTeamableType] = useState<'hackathon' | 'task'>(initialTeamableType)
+  const [teamableId, setTeamableId] = useState(initialTeamableId)
+
+  // ✨ تحديث القيم عند تغير الـ query params
+  useEffect(() => {
+    if (defaultTaskId) {
+      setTeamableType('task')
+      setTeamableId(defaultTaskId)
+    } else if (defaultHackathonId) {
+      setTeamableType('hackathon')
+      setTeamableId(defaultHackathonId)
+    }
+  }, [defaultHackathonId, defaultTaskId])
 
   const mutation = useMutation({
     mutationFn: mockCreateTeam,
@@ -243,20 +365,32 @@ function CreateTeamModal({
       toast.success(`تم إنشاء فريق ${data.name} ✓`)
       onOpenChange(false)
       setName('')
-      setHackathonId('')
-      window.location.href = `/teams/${data.id}`
+      setTeamableId('')
+      // ✨ P0-4: استخدم navigate بدل window.location — يحافظ على SPA + React Query cache
+      onCreated(data.id)
     },
-    onError: () => toast.error('حدث خطأ أثناء الإنشاء'),
+    onError: (err: unknown) => {
+      toast.error(extractApiMessage(err, 'حدث خطأ أثناء الإنشاء'))
+    },
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || !hackathonId) {
+    if (!name || !teamableId) {
       toast.error('املأ جميع الحقول')
       return
     }
-    mutation.mutate({ name, teamableId: Number(hackathonId), teamableType: 'Hackathon' })
+    // ✨ إرسال lowercase ('hackathon' أو 'task') — Laravel يتوقع هذا
+    mutation.mutate({
+      name,
+      teamableId: Number(teamableId),
+      teamableType: teamableType,
+    })
   }
+
+  // ✨ اختيار القائمة المناسبة حسب النوع
+  const teamableOptions = teamableType === 'hackathon' ? teamHackathons : teamTasks
+  const hasOptions = teamableOptions.length > 0
 
   return (
     <AnimatePresence>
@@ -294,24 +428,56 @@ function CreateTeamModal({
                 placeholder="مثال: Code Warriors"
               />
 
+              {/* ✨ اختيار نوع الفريق: هاكاثون أو مهمة */}
               <Select
-                label="اختر الهاكاثون"
+                label="نوع المشاركة"
                 required
-                value={hackathonId}
-                onChange={(e) => setHackathonId(e.target.value)}
+                value={teamableType}
+                onChange={(e) => {
+                  setTeamableType(e.target.value as 'hackathon' | 'task')
+                  setTeamableId('') // إعادة تعيين عند تغيير النوع
+                }}
               >
-                <option value="" disabled>اختر هاكاثوناً</option>
-                {hackathons.map((h) => (
-                  <option key={h.id} value={h.id}>{h.title}</option>
+                <option value="hackathon">هاكاثون</option>
+                <option value="task">مهمة</option>
+              </Select>
+
+              {/* ✨ اختيار الـ teamable حسب النوع */}
+              <Select
+                label={teamableType === 'hackathon' ? 'اختر الهاكاثون' : 'اختر المهمة'}
+                required
+                value={teamableId}
+                onChange={(e) => setTeamableId(e.target.value)}
+              >
+                <option value="" disabled>
+                  {hasOptions
+                    ? `اختر ${teamableType === 'hackathon' ? 'هاكاثوناً' : 'مهمة'}`
+                    : `لا توجد ${teamableType === 'hackathon' ? 'هاكاثونات' : 'مهام'} فِرقية متاحة`}
+                </option>
+                {teamableOptions.map((item) => (
+                  <option key={item.id} value={item.id}>{item.title}</option>
                 ))}
               </Select>
 
+              {/* ✨ تنبيه عند عدم توفر خيارات */}
+              {!hasOptions && (
+                <div className="p-3 bg-warning-soft border border-warning-border rounded-md mb-5 text-sm text-warning">
+                  <strong>تنبيه:</strong>{' '}
+                  {teamableType === 'hackathon'
+                    ? 'لا توجد هاكاثونات فِريقية مفعّلة حالياً. تواصل مع المسؤول.'
+                    : 'لا توجد مهام فِريقية مفعّلة حالياً. تواصل مع المسؤول.'}
+                </div>
+              )}
+
               <div className="p-3 bg-info-soft border border-info-border rounded-md mb-5 text-sm text-info">
-                <strong>ملاحظة:</strong> ستُنشأ كقائد للفريق تلقائياً وستتمكن من دعوة أعضاء بعد الإنشاء.
+                <strong>ملاحظة:</strong>{' '}
+                {teamableType === 'hackathon'
+                  ? 'ستُنشأ كقائد للفريق تلقائياً وستتمكن من دعوة أعضاء بعد الإنشاء (حتى الحد الأقصى لكل هاكاثون).'
+                  : 'ستُنشأ كقائد للفريق تلقائياً وستتمكن من دعوة أعضاء بعد الإنشاء (حتى الحد الأقصى لكل مهمة).'}
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" block disabled={mutation.isPending}>
+                <Button type="submit" block disabled={mutation.isPending || !hasOptions}>
                   {mutation.isPending ? (
                     <>
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

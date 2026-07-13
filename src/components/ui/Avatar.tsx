@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { cn, gradientFor, getInitials } from '@/lib/utils'
+import { assetUrl } from '@/lib/api'
 
 interface AvatarProps {
   name: string
@@ -16,6 +18,10 @@ const sizeClasses = {
 
 export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
   const [from, to] = gradientFor(name)
+  // ✨ FIX #1: حوّل روابط avatar النسبية لروابط مطلقة عبر assetUrl
+  // (مع Vite proxy في التطوير، يُرجِعها كما هي؛ في الإنتاج يُضيف STORAGE_BASE)
+  const resolvedSrc = useMemo(() => assetUrl(src), [src])
+
   return (
     <div
       className={cn(
@@ -23,10 +29,10 @@ export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
         sizeClasses[size],
         className,
       )}
-      style={src ? undefined : { background: `linear-gradient(135deg, ${from}, ${to})` }}
+      style={resolvedSrc ? undefined : { background: `linear-gradient(135deg, ${from}, ${to})` }}
     >
-      {src ? (
-        <img src={src} alt={name} className="w-full h-full rounded-full object-cover" />
+      {resolvedSrc ? (
+        <img src={resolvedSrc} alt={name} className="w-full h-full rounded-full object-cover" />
       ) : (
         getInitials(name)
       )}

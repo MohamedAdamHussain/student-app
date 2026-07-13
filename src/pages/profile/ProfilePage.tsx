@@ -24,6 +24,23 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { useAuth } from '@/context/AuthContext'
 import { mockGetSubmissions, mockGetDashboardStats, mockGetProfile } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
+import { formatDate } from '@/lib/utils'
+import { assetUrl } from '@/lib/api'
+import type { Batch } from '@/types'
+
+/**
+ * ✨ P1-1: حساب نسبة تقدم البرنامج من تواريخ الدفعة
+ * (0% لو لم تبدأ، 100% لو انتهت، نسبة الوقت المنقضي بينهما)
+ */
+function programProgress(batch?: Batch | null): number {
+  if (!batch?.startDate || !batch?.endDate) return 0
+  const start = new Date(batch.startDate).getTime()
+  const end = new Date(batch.endDate).getTime()
+  const now = Date.now()
+  if (now <= start) return 0
+  if (now >= end) return 100
+  return Math.round(((now - start) / (end - start)) * 100)
+}
 
 export function ProfilePage() {
   const { user } = useAuth()
@@ -34,16 +51,18 @@ export function ProfilePage() {
     queryFn: mockGetProfile,
   })
 
-  const { data: submissions } = useQuery({
+  const { data: submissionsData } = useQuery({
     queryKey: queryKeys.submissions,
-    queryFn: mockGetSubmissions,
+    queryFn: () => mockGetSubmissions(),
   })
   const { data: stats } = useQuery({
     queryKey: queryKeys.stats,
     queryFn: mockGetDashboardStats,
   })
 
-  const acceptedSubmissions = (submissions ?? []).filter((s) => s.status === 'accepted')
+  // ✨ Stage 7: استخرج data من PaginatedResponse
+  const submissions = submissionsData?.data ?? []
+  const acceptedSubmissions = submissions.filter((s) => s.status === 'accepted')
   const featuredProject = profile?.featuredProject
 
   if (!profile || profileLoading) {
@@ -112,7 +131,11 @@ export function ProfilePage() {
                   مُتحقق
                 </Badge>
               </div>
-              <div className="text-ink-500 mb-4">{profile.tagline} · Batch 1 - 2026</div>
+              <div className="text-ink-500 mb-4">
+                {profile.tagline}
+                {/* ✨ P1-1: اسم الدفعة ديناميكي من user.batch */}
+                {user?.batch?.name ? ` · ${user.batch.name}` : user?.batchId ? ` · Batch ${user.batchId}` : ''}
+              </div>
               <p className="text-ink-600 dark:text-ink-300 max-w-2xl leading-relaxed">
                 {profile.bio}
               </p>
@@ -143,7 +166,24 @@ export function ProfilePage() {
                 </a>
               )}
               {profile.cvPath && (
-                <a href="#">
+                <a
+                  href={assetUrl(profile.cvUrl ?? profile.cvPath) ?? '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => {
+                    // ✨ FIX #1: استخدم assetUrl بدل التحويل اليدوي — يعمل في dev (proxy) و prod
+                    const url = assetUrl(profile.cvUrl ?? profile.cvPath)
+                    if (!url) {
+                      e.preventDefault()
+                      return
+                    }
+                    // لو الـ href الافتراضي مختلف (مثلاً في mock mode)، افتح الـ URL الصحيح
+                    if (url !== e.currentTarget.href) {
+                      e.preventDefault()
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }
+                  }}
+                >
                   <Button variant="secondary" size="sm">
                     <Download size={14} />
                     تحميل CV
@@ -170,14 +210,22 @@ export function ProfilePage() {
 
         <Card>
           <CardTitle className="mb-4">الدفعة</CardTitle>
-          <div className="font-semibold text-lg">Batch 1 - 2026</div>
-          <div className="text-sm text-ink-400 mt-1">يناير 2026 → يونيو 2026</div>
+          {/* ✨ P1-1: اسم الدفعة ديناميكي من user.batch */}
+          <div className="font-semibold text-lg">{user?.batch?.name ?? (user?.batchId ? `Batch ${user.batchId}` : '—')}</div>
+          {/* ✨ P1-1: تواريخ الدفعة ديناميكية — fallback لـ "—" لو لا توجد بيانات */}
+          <div className="text-sm text-ink-400 mt-1">
+            {user?.batch?.startDate && user?.batch?.endDate
+              ? `${formatDate(user.batch.startDate)} → ${formatDate(user.batch.endDate)}`
+              : '—'
+            }
+          </div>
           <div className="mt-4">
             <div className="flex justify-between text-xs mb-2">
               <span className="text-ink-500">تقدم البرنامج</span>
-              <span className="font-semibold">88%</span>
+              {/* ✨ حساب نسبة التقدم ديناميكياً من تواريخ الدفعة */}
+              <span className="font-semibold">{programProgress(user?.batch)}%</span>
             </div>
-            <Progress value={88} variant="success" />
+            <Progress value={programProgress(user?.batch)} variant="success" />
           </div>
         </Card>
 
@@ -186,7 +234,7 @@ export function ProfilePage() {
           <div className="flex flex-col gap-3">
             <div className="flex justify-between">
               <span className="text-sm text-ink-500">إجمالي التقديمات</span>
-              <span className="font-bold">{stats?.total_submissions ?? 0}</span>
+              <span className="font-bold">{stats?.totalSubmissions ?? 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-ink-500">مقبولة</span>
@@ -194,13 +242,14 @@ export function ProfilePage() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-ink-500">متوسط الدرجات</span>
-              <span className="font-bold">{stats?.average_score ?? 0}/10</span>
+              <span className="font-bold">{stats?.averageScore ?? 0}/10</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-ink-500">ترتيبي بالدفعة</span>
+              {/* ✨ P1-7: لا fallback مضلل — لو ما في rank، اعرض "—" بدل "3" */}
               <span className="font-bold flex items-center gap-1">
                 <Trophy size={14} className="text-warning" />
-                #{stats?.rank_in_batch ?? 3}
+                {stats?.rankInBatch ? `#${stats.rankInBatch}` : '—'}
               </span>
             </div>
           </div>
@@ -221,7 +270,8 @@ export function ProfilePage() {
                 <span className="font-bold text-brand-600">المشروع المميز</span>
               </div>
               <Badge variant="success">
-                مقبول · {featuredProject.score}/100
+                {/* ✨ P0-1: score من 10 — لا قسمة، لا /100 */}
+                مقبول · {featuredProject.score?.toFixed(1)}/10
               </Badge>
             </div>
 
@@ -365,7 +415,8 @@ export function ProfilePage() {
                   </td>
                   <td className="p-3">
                     <Badge variant="success">
-                      {s.score ? `${(s.score / 10).toFixed(1)}/10` : '—'}
+                      {/* ✨ P0-1: score من 10 — لا قسمة */}
+                      {s.score != null ? `${s.score.toFixed(1)}/10` : '—'}
                     </Badge>
                   </td>
                   <td className="p-3 text-left">

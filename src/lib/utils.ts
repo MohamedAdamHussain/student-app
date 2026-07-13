@@ -39,6 +39,8 @@ function parseDate(dateStr: string | null | undefined): Date | null {
 }
 
 // Format date to Arabic (defensive — handles invalid dates)
+// ✨ BUG FIX #20: استخدم UTC لمنع انحراف الأيام بين timezone Laravel (UTC) والمتصفح (محلي)
+// مثال: deadline '2026-07-05T00:00:00Z' يظهر كـ '4 يوليو' في UTC-3 لو لم نستخدم UTC
 export function formatDate(dateStr: string | null | undefined, opts?: Intl.DateTimeFormatOptions): string {
   const date = parseDate(dateStr)
   if (!date) return '—'
@@ -48,6 +50,7 @@ export function formatDate(dateStr: string | null | undefined, opts?: Intl.DateT
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      timeZone: 'UTC', // ✨ أعرض بالـ UTC ليطابق ما يراه الـ Laravel
       ...opts,
     }).format(date)
   } catch {

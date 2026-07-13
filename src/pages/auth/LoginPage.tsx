@@ -6,13 +6,15 @@ import { Logo } from '@/components/ui/Logo'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@/context/AuthContext'
+import { extractApiMessage, getErrorStatus, isNetworkError } from '@/lib/errors'
 import { toast } from 'sonner'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [email, setEmail] = useState('ahmed.ali@student.com')
-  const [password, setPassword] = useState('password123')
+  // ✨ P0-4: credentials افتراضية فقط في وضع التطوير — لا تتسرب للـ production build
+  const [email, setEmail] = useState(import.meta.env.DEV ? 'ahmed.ali@student.com' : '')
+  const [password, setPassword] = useState(import.meta.env.DEV ? 'password123' : '')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
@@ -22,38 +24,32 @@ export function LoginPage() {
       await login({ email, password })
       toast.success('مرحباً بعودتك! 👋')
       navigate('/dashboard')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Login error details:', err)
 
-      //✨ رسالة خطأ ذكية حسب نوع المشكلة
-      let message = 'بيانات غير صحيحة. حاول مرة أخرى.'
+      // ✨ رسالة خطأ ذكية حسب نوع المشكلة (شبكة / حالة HTTP / رسالة Laravel)
+      let message: string
 
-      if (err?.response) {
-        // Laravel response
-        const status = err.response.status
-        const laravelMessage = err.response.data?.message
-
-        if (status === 401) {
-          message = laravelMessage ?? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-        } else if (status === 422) {
-          message = laravelMessage ?? 'بيانات غير صالحة'
-        } else if (status === 419) {
-          message = 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى'
-        } else if (status >= 500) {
-          message = 'خطأ في الخادم. تأكد أن Laravel يعمل'
-        } else {
-          message = laravelMessage ?? message
-        }
-      } else if (err?.request) {
-        // Request was made but no response (CORS / Network)
+      if (isNetworkError(err)) {
+        // لا استجابة من الخادم أصلاً (CORS / شبكة / خادم مطفأ)
         message = 'تعذّر الاتصال بالخادم. تحقق من أن Laravel يعمل على ' + (import.meta.env.VITE_API_URL ?? '/api')
         console.error('Network/CORS error. Check:', {
           apiUrl: import.meta.env.VITE_API_URL,
           useMock: import.meta.env.VITE_USE_MOCK,
-          error: err.message,
+          error: extractApiMessage(err),
         })
       } else {
-        message = err?.message ?? message
+        // يوجد استجابة HTTP — اختر الرسالة المناسبة حسب الحالة
+        const status = getErrorStatus(err)
+        if (status === 401) {
+          message = extractApiMessage(err, 'البريد الإلكتروني أو كلمة المرور غير صحيحة')
+        } else if (status === 419) {
+          message = 'انتهت صلاحية الجلسة. حدّث الصفحة وحاول مرة أخرى'
+        } else if (status && status >= 500) {
+          message = 'خطأ في الخادم. تأكد أن Laravel يعمل'
+        } else {
+          message = extractApiMessage(err, 'بيانات غير صحيحة. حاول مرة أخرى.')
+        }
       }
 
       toast.error(message)
@@ -188,9 +184,9 @@ export function LoginPage() {
                 />
                 <span className="text-sm text-ink-500">إبقائي مسجّلاً</span>
               </label>
-              <a href="#" className="text-sm text-brand-500 font-medium">
+              <Link to="/forgot-password" className="text-sm text-brand-500 font-medium hover:underline">
                 نسيت كلمة المرور؟
-              </a>
+              </Link>
             </div>
 
             <Button type="submit" size="lg" block disabled={loading}>

@@ -1,10 +1,9 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
+import { useState, useRef, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
-  Code, Globe, Video, FileText, Upload, AlertTriangle,
-  Save, X, CheckCircle2, Circle, Calendar,
+  FileText, Upload, AlertTriangle,
+  Save, X, CheckCircle2, Circle, Calendar, Trash2,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -12,18 +11,25 @@ import { Card, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input, Textarea, Select } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-import { mockGetTasks, mockGetHackathons, mockGetTeams, mockCreateSubmission } from '@/lib/mockData'
+import { mockGetTasks, mockGetHackathons, mockGetTeams } from '@/lib/mockData'
 import { queryKeys } from '@/lib/queryClient'
+import { useCreateSubmission } from '@/hooks/useSubmissions'
+import { validateFile, getFileExtension } from '@/lib/fileValidation'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 export function SubmissionNewPage() {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { data: tasks } = useQuery({ queryKey: queryKeys.tasks, queryFn: mockGetTasks })
-  const { data: hackathons } = useQuery({ queryKey: queryKeys.hackathons, queryFn: mockGetHackathons })
+  const { data: tasksData } = useQuery({ queryKey: queryKeys.tasks, queryFn: () => mockGetTasks() })
+  const { data: hackathonsData } = useQuery({ queryKey: queryKeys.hackathons, queryFn: () => mockGetHackathons() })
   const { data: teams } = useQuery({ queryKey: queryKeys.teams, queryFn: mockGetTeams })
+
+  const createMutation = useCreateSubmission()
+
+  // ✨ Stage 7: استخرج data من PaginatedResponse
+  const tasks = tasksData?.data ?? []
+  const hackathons = hackathonsData?.data ?? []
 
   const [type, setType] = useState<'task' | 'hackathon'>('task')
   const [taskId, setTaskId] = useState('')
@@ -33,31 +39,21 @@ export function SubmissionNewPage() {
   const [liveUrl, setLiveUrl] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [notes, setNotes] = useState('')
+  // ✨ P0-3: file state فعلي (كان decorative فقط)
+  const [file, setFile] = useState<File | null>(null)
 
   const selectedTask = tasks?.find((t) => t.id === Number(taskId))
   const videoRequired = type === 'task' && selectedTask?.videoRequired
 
-  const createMutation = useMutation({
-    mutationFn: mockCreateSubmission,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.submissions })
-      toast.success('تم إنشاء التقديم بنجاح ✓')
-      navigate(`/submissions/${data.id}`)
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message ?? 'حدث خطأ أثناء الإنشاء'
-      toast.error(msg)
-    },
-  })
-
   // ✨ P0-1: فحص deadline قبل التقديم
   const isDeadlinePassed = () => {
-    if (type === 'task' && selectedTask?.batch?.end_date) {
-      return new Date(selectedTask.batch.end_date) < new Date()
+    if (type === 'task' && selectedTask?.batch?.endDate) {
+      return new Date(selectedTask.batch.endDate) < new Date()
     }
     if (type === 'hackathon' && hackathonId) {
-      const h = hackathons?.find((h: any) => h.id === Number(hackathonId))
-      return h && new Date(h.deadline) < new Date()
+      // ✨ P2-1: استخدم Hackathon type بدلاً من any
+      const h = hackathons?.find((h) => h.id === Number(hackathonId))
+      return h ? new Date(h.deadline) < new Date() : false
     }
     return false
   }
@@ -80,13 +76,31 @@ export function SubmissionNewPage() {
       toast.error('اختر هاكاثوناً للتسليم عليه')
       return
     }
-    if (!githubUrl && !liveUrl && !videoUrl) {
-      toast.error('يجب تقديم صيغة واحدة على الأقل')
+    // ✨ P0-3: الملف يُحسب كـ format صالح (لم يعد decorative)
+    if (!githubUrl && !liveUrl && !videoUrl && !file) {
+      toast.error('يجب تقديم صيغة واحدة على الأقل (GitHub، Live، فيديو، أو ملف)')
       return
     }
     if (videoRequired && !videoUrl) {
       toast.error('هذه المهمة تتطلب رابط فيديو')
       return
+    }
+    // ✨ P0-3: فحص موحّد لحجم الملف (10MB max)
+    if (file && !validateFile(file, {
+      // أنواع MIME واسعة لأن المتصفحات لا تُحدّد نوع MIME لكل الصيغ
+      types: ['application/pdf', 'application/zip', 'application/x-zip-compressed', 'application/octet-stream', ''],
+      maxSizeMB: 10,
+      label: 'الملف',
+    })) return
+
+    // ✨ P0-3: فحص نوع الملف بالامتداد (أدق من MIME لأنواع مثل .rar/.7z/.docx)
+    const allowedExtensions = ['pdf', 'zip', 'rar', '7z', 'doc', 'docx', 'txt', 'md', 'json', 'csv']
+    if (file) {
+      const ext = getFileExtension(file)
+      if (!allowedExtensions.includes(ext)) {
+        toast.error('صيغة الملف غير مدعومة. المسموح: PDF, ZIP, RAR, 7Z, DOC(X), TXT, MD, JSON, CSV')
+        return
+      }
     }
 
     createMutation.mutate({
@@ -97,13 +111,15 @@ export function SubmissionNewPage() {
       liveUrl: liveUrl || null,
       videoUrl: videoUrl || null,
       notes: notes || null,
+      // ✨ P0-3: تمرير الملف فعلياً للـ service
+      file: file ?? undefined,
     })
   }
 
   // Checklist
   const checklist = [
     { done: !!(type === 'task' ? taskId : hackathonId), label: 'اخترت مهمة أو هاكاثون' },
-    { done: !!(githubUrl || liveUrl), label: 'صيغة واحدة على الأقل (GitHub, Live)' },
+    { done: !!(githubUrl || liveUrl || file), label: 'صيغة واحدة على الأقل (GitHub, Live, أو ملف)' },
     { done: !videoRequired || !!videoUrl, label: 'فيديو إلزامي', required: videoRequired },
   ]
 
@@ -254,13 +270,68 @@ export function SubmissionNewPage() {
               placeholder="https://myproject.vercel.app"
             />
 
-            {/* File upload (decorative) */}
+            {/* ✨ P0-3: رفع ملف فعلي (لم يعد decorative) */}
             <div className="mb-5">
               <label className="block text-[13px] font-semibold mb-1.5">ملف مرفق (PDF, ZIP)</label>
-              <div className="border-2 border-dashed border-ink-300 dark:border-ink-700 rounded-md p-5 text-center cursor-pointer hover:border-brand-500 transition-colors">
-                <Upload size={20} className="mx-auto mb-2 text-ink-400" />
-                <div className="text-sm font-semibold mb-1">اسحب الملف هنا أو اضغط للاختيار</div>
-                <div className="text-xs text-ink-400">PDF, ZIP · حد أقصى 10MB</div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.zip,.rar,.7z,.doc,.docx,.txt,.md,.json,.csv"
+                onChange={(e) => {
+                  const selected = e.target.files?.[0]
+                  if (selected) setFile(selected)
+                }}
+              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.add('border-brand-500', 'bg-brand-50', 'dark:bg-brand-900/20')
+                }}
+                onDragLeave={(e) => {
+                  e.currentTarget.classList.remove('border-brand-500', 'bg-brand-50', 'dark:bg-brand-900/20')
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.currentTarget.classList.remove('border-brand-500', 'bg-brand-50', 'dark:bg-brand-900/20')
+                  const dropped = e.dataTransfer.files?.[0]
+                  if (dropped) setFile(dropped)
+                }}
+                className={cn(
+                  'border-2 border-dashed rounded-md p-5 text-center cursor-pointer hover:border-brand-500 transition-colors',
+                  file
+                    ? 'border-success bg-success-soft'
+                    : 'border-ink-300 dark:border-ink-700',
+                )}
+              >
+                {file ? (
+                  <>
+                    <FileText size={20} className="mx-auto mb-2 text-success" />
+                    <div className="text-sm font-semibold mb-1 text-success">{file.name}</div>
+                    <div className="text-xs text-ink-400">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · اضغط للتغيير
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFile(null)
+                        if (fileInputRef.current) fileInputRef.current.value = ''
+                      }}
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-danger hover:underline"
+                    >
+                      <Trash2 size={12} />
+                      إزالة الملف
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} className="mx-auto mb-2 text-ink-400" />
+                    <div className="text-sm font-semibold mb-1">اسحب الملف هنا أو اضغط للاختيار</div>
+                    <div className="text-xs text-ink-400">PDF, ZIP, RAR, 7Z, DOC, TXT · حد أقصى 10MB</div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -298,7 +369,7 @@ export function SubmissionNewPage() {
                 </>
               )}
             </Button>
-            <Button type="button" variant="secondary" size="lg">حفظ كمسودة</Button>
+            {/* ✨ P1-6: زر "حفظ كمسودة" مُزال — لا يوجد drafts API في الـ backend */}
             <Link to="/submissions">
               <Button type="button" variant="ghost" size="lg">إلغاء</Button>
             </Link>
@@ -323,7 +394,7 @@ export function SubmissionNewPage() {
                 <div className="font-semibold mb-1">{selectedTask.title}</div>
                 <div className="text-xs text-ink-400 mb-3 flex items-center gap-1">
                   <Calendar size={12} />
-                  ينتهي {selectedTask.batch?.end_date}
+                  ينتهي {selectedTask.batch?.endDate}
                 </div>
                 <Link to={`/tasks/${selectedTask.id}`}>
                   <Button variant="secondary" size="sm" block>عرض تفاصيل المهمة</Button>
